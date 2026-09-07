@@ -63,6 +63,93 @@ object PuppetWarpEngine {
     }
 
     /**
+     * Deforms a single 2D point using Pin positions via smooth RBF and optional 3D deformers.
+     */
+    fun deformPoint(
+        origX: Float,
+        origY: Float,
+        pins: List<PuppetPin>,
+        deformerType: InvisibleDeformerType = InvisibleDeformerType.NONE,
+        deformerRotation: Float = 0f,
+        deformerRadius: Float = 150f,
+        width: Float = 300f,
+        height: Float = 300f
+    ): PointData {
+        if (pins.isEmpty() && deformerType == InvisibleDeformerType.NONE) {
+            return PointData(origX, origY)
+        }
+
+        var totalWeight = 0f
+        var deltaX = 0f
+        var deltaY = 0f
+
+        for (pin in pins) {
+            val dx = origX - pin.originalX
+            val dy = origY - pin.originalY
+            val distSq = dx * dx + dy * dy
+            val radiusSq = pin.radius * pin.radius
+
+            val weight = exp(-distSq / (2f * radiusSq)) * pin.weight
+            if (weight > 0.0001f) {
+                val pinDeltaX = pin.x - pin.originalX
+                val pinDeltaY = pin.y - pin.originalY
+                deltaX += pinDeltaX * weight
+                deltaY += pinDeltaY * weight
+                totalWeight += weight
+            }
+        }
+
+        var currentX = if (totalWeight > 0.0001f) {
+            origX + (deltaX / (totalWeight + 0.15f))
+        } else {
+            origX
+        }
+
+        var currentY = if (totalWeight > 0.0001f) {
+            origY + (deltaY / (totalWeight + 0.15f))
+        } else {
+            origY
+        }
+
+        if (deformerType != InvisibleDeformerType.NONE && deformerRadius > 10f) {
+            val halfW = width / 2f
+            val normX = ((currentX / halfW).coerceIn(-1f, 1f))
+            val angleRad = (normX * Math.PI.toFloat() * 0.5f) + Math.toRadians(deformerRotation.toDouble()).toFloat()
+
+            when (deformerType) {
+                InvisibleDeformerType.CYLINDER -> {
+                    val cylinderX = deformerRadius * sin(angleRad)
+                    val depthZ = deformerRadius * cos(angleRad)
+                    val perspectiveScale = (depthZ + deformerRadius * 1.8f) / (deformerRadius * 2f)
+                    currentX = cylinderX
+                    currentY *= perspectiveScale.coerceIn(0.5f, 1.5f)
+                }
+                InvisibleDeformerType.SPHERE -> {
+                    val halfH = height / 2f
+                    val normY = (currentY / halfH).coerceIn(-1f, 1f)
+                    val latRad = normY * Math.PI.toFloat() * 0.5f
+                    val sphereX = deformerRadius * sin(angleRad) * cos(latRad)
+                    val sphereY = deformerRadius * sin(latRad)
+                    currentX = sphereX
+                    currentY = sphereY
+                }
+                InvisibleDeformerType.CAPSULE -> {
+                    val capX = deformerRadius * sin(angleRad)
+                    currentX = capX
+                }
+                InvisibleDeformerType.BALLOON -> {
+                    val inflateFactor = 1f + (deformerRadius / 300f) * sin(Math.toRadians(deformerRotation.toDouble()).toFloat() + 1f).coerceIn(0.1f, 1.8f)
+                    currentX *= inflateFactor
+                    currentY *= inflateFactor
+                }
+                InvisibleDeformerType.NONE -> {}
+            }
+        }
+
+        return PointData(currentX, currentY)
+    }
+
+    /**
      * Deforms the mesh vertices using Pin positions via smooth Radial Basis Function (RBF)
      * and optional Invisible Deformers (Sphere / Cylinder / Capsule 360 wrap).
      */
@@ -78,77 +165,18 @@ object PuppetWarpEngine {
             return originalMesh.originalVertices
         }
 
-        val deformedVertices = ArrayList<PointData>(originalMesh.originalVertices.size)
-
-        for (orig in originalMesh.originalVertices) {
-            var totalWeight = 0f
-            var deltaX = 0f
-            var deltaY = 0f
-
-            for (pin in pins) {
-                val dx = orig.x - pin.originalX
-                val dy = orig.y - pin.originalY
-                val distSq = dx * dx + dy * dy
-                val radiusSq = pin.radius * pin.radius
-
-                // Gaussian smooth falloff kernel
-                val weight = exp(-distSq / (2f * radiusSq)) * pin.weight
-                if (weight > 0.0001f) {
-                    val pinDeltaX = pin.x - pin.originalX
-                    val pinDeltaY = pin.y - pin.originalY
-                    deltaX += pinDeltaX * weight
-                    deltaY += pinDeltaY * weight
-                    totalWeight += weight
-                }
-            }
-
-            var currentX = if (totalWeight > 0.0001f) {
-                orig.x + (deltaX / (totalWeight + 0.15f))
-            } else {
-                orig.x
-            }
-
-            var currentY = if (totalWeight > 0.0001f) {
-                orig.y + (deltaY / (totalWeight + 0.15f))
-            } else {
-                orig.y
-            }
-
-            // Invisible 3D Deformers: Cylinder / Sphere wrap simulation
-            if (deformerType != InvisibleDeformerType.NONE && deformerRadius > 10f) {
-                val halfW = originalMesh.width / 2f
-                val normX = ((currentX / halfW).coerceIn(-1f, 1f))
-                val angleRad = (normX * Math.PI.toFloat() * 0.5f) + Math.toRadians(deformerRotation.toDouble()).toFloat()
-
-                when (deformerType) {
-                    InvisibleDeformerType.CYLINDER -> {
-                        val cylinderX = deformerRadius * sin(angleRad)
-                        val depthZ = deformerRadius * cos(angleRad)
-                        val perspectiveScale = (depthZ + deformerRadius * 1.8f) / (deformerRadius * 2f)
-                        currentX = cylinderX
-                        currentY *= perspectiveScale.coerceIn(0.5f, 1.5f)
-                    }
-                    InvisibleDeformerType.SPHERE -> {
-                        val halfH = originalMesh.height / 2f
-                        val normY = (currentY / halfH).coerceIn(-1f, 1f)
-                        val latRad = normY * Math.PI.toFloat() * 0.5f
-                        val sphereX = deformerRadius * sin(angleRad) * cos(latRad)
-                        val sphereY = deformerRadius * sin(latRad)
-                        currentX = sphereX
-                        currentY = sphereY
-                    }
-                    InvisibleDeformerType.CAPSULE -> {
-                        val capX = deformerRadius * sin(angleRad)
-                        currentX = capX
-                    }
-                    InvisibleDeformerType.NONE -> {}
-                }
-            }
-
-            deformedVertices.add(PointData(currentX, currentY))
+        return originalMesh.originalVertices.map { orig ->
+            deformPoint(
+                origX = orig.x,
+                origY = orig.y,
+                pins = pins,
+                deformerType = deformerType,
+                deformerRotation = deformerRotation,
+                deformerRadius = deformerRadius,
+                width = originalMesh.width,
+                height = originalMesh.height
+            )
         }
-
-        return deformedVertices
     }
 
     /**
@@ -210,6 +238,26 @@ object PuppetWarpEngine {
                     val inflate = sin(timeSeconds * 3f) * 12f
                     vx += (pin.originalX / 100f) * inflate * 0.1f
                     vy += (pin.originalY / 100f) * inflate * 0.1f
+                }
+                PhysicsPreset.HEAVY_STONE -> {
+                    // Heavy stone: strong gravity, minimal wobble, high damping
+                    vy += params.gravity * 0.25f
+                    vx *= 0.7f
+                }
+                PhysicsPreset.WOOD -> {
+                    // Stiff wood: very little micro-vibration
+                    val woodJitter = sin(timeSeconds * 16f) * 2f
+                    vx += woodJitter * 0.05f
+                }
+                PhysicsPreset.METAL -> {
+                    // Metallic springiness: fast ping-pong decay
+                    val metalPing = sin(timeSeconds * 20f) * 6f
+                    vx += metalPing * 0.1f
+                }
+                PhysicsPreset.SPRING -> {
+                    // Bouncy dynamic spring oscillation
+                    val springBob = sin(timeSeconds * 8f) * 18f
+                    vy += springBob * 0.3f
                 }
                 PhysicsPreset.NONE -> {}
             }

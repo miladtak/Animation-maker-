@@ -92,6 +92,15 @@ class PuppetViewModel : ViewModel() {
     private val _exportCompleted = MutableStateFlow(false)
     val exportCompleted: StateFlow<Boolean> = _exportCompleted.asStateFlow()
 
+    private val _isHomeScreenVisible = MutableStateFlow(false)
+    val isHomeScreenVisible: StateFlow<Boolean> = _isHomeScreenVisible.asStateFlow()
+
+    private val _isZenMode = MutableStateFlow(false)
+    val isZenMode: StateFlow<Boolean> = _isZenMode.asStateFlow()
+
+    private val _recentProjects = MutableStateFlow<List<ProjectMetadata>>(emptyList())
+    val recentProjects: StateFlow<List<ProjectMetadata>> = _recentProjects.asStateFlow()
+
     private var currentStrokePoints = mutableListOf<PointData>()
 
     init {
@@ -235,6 +244,10 @@ class PuppetViewModel : ViewModel() {
                 }
             )
         }
+    }
+
+    fun setProjectSettings(settings: ProjectSettings) {
+        _project.update { it.copy(settings = settings) }
     }
 
     fun setViewportOffset(offset: Offset) {
@@ -769,5 +782,168 @@ class PuppetViewModel : ViewModel() {
                 _isExporting.value = false
             }
         }
+    }
+
+    // --- HOME SCREEN & PRESETS ---
+    fun showHomeScreen() { _isHomeScreenVisible.value = true }
+    fun hideHomeScreen() { _isHomeScreenVisible.value = false }
+    fun toggleHomeScreen() { _isHomeScreenVisible.value = !_isHomeScreenVisible.value }
+
+    fun refreshRecentProjects(context: Context) {
+        _recentProjects.value = ProjectStorageManager.getRecentProjects(context)
+    }
+
+    fun newProjectFromPreset(preset: CanvasPreset, context: Context) {
+        val newProj = ProjectStorageManager.createPresetProject(preset)
+        _project.value = newProj
+        ProjectStorageManager.autosaveProject(context, newProj)
+        refreshRecentProjects(context)
+        undoRedoManager.recordState(newProj)
+        _isHomeScreenVisible.value = false
+    }
+
+    fun openProjectById(id: String, context: Context) {
+        val file = File(context.filesDir, "project_${id}.json")
+        if (file.exists()) {
+            val json = file.readText()
+            val loaded = ProjectStorageManager.loadProjectFromJson(json)
+            if (loaded != null) {
+                _project.value = loaded
+                undoRedoManager.recordState(loaded)
+                _isHomeScreenVisible.value = false
+                return
+            }
+        }
+        // Fallback: Autosave file if matches or latest
+        val autosaved = ProjectStorageManager.loadAutosavedProject(context)
+        if (autosaved != null) {
+            _project.value = autosaved
+            undoRedoManager.recordState(autosaved)
+            _isHomeScreenVisible.value = false
+        }
+    }
+
+    fun importPuppet2d(file: File, context: Context): Boolean {
+        val loaded = ProjectStorageManager.importFromPuppet2dFile(file)
+        if (loaded != null) {
+            _project.value = loaded
+            ProjectStorageManager.autosaveProject(context, loaded)
+            refreshRecentProjects(context)
+            undoRedoManager.recordState(loaded)
+            _isHomeScreenVisible.value = false
+            return true
+        }
+        return false
+    }
+
+    fun exportPuppet2d(destinationFile: File): Boolean {
+        return ProjectStorageManager.exportToPuppet2dFile(_project.value, destinationFile)
+    }
+
+    // --- ZEN / FOCUS MODE ---
+    fun toggleZenMode() { _isZenMode.value = !_isZenMode.value }
+    fun exitZenMode() { _isZenMode.value = false }
+
+    // --- SCENES & ROTOPROJECT ---
+    fun addScene(name: String = "صحنه") {
+        val current = _project.value
+        val newScene = Scene(
+            id = UUID.randomUUID().toString(),
+            name = "$name ${current.scenes.size + 1}",
+            timeline = Timeline(id = UUID.randomUUID().toString(), name = "تایم‌لاین صحنه ${current.scenes.size + 1}"),
+            layers = current.layers
+        )
+        _project.update { p ->
+            p.copy(
+                scenes = p.scenes + newScene,
+                activeSceneIndex = p.scenes.size
+            )
+        }
+        undoRedoManager.recordState(_project.value)
+    }
+
+    fun switchScene(index: Int) {
+        val current = _project.value
+        if (index in current.scenes.indices) {
+            val scene = current.scenes[index]
+            _project.update { p ->
+                p.copy(
+                    activeSceneIndex = index,
+                    layers = if (scene.layers.isNotEmpty()) scene.layers else p.layers,
+                    timeline = scene.timeline
+                )
+            }
+        }
+    }
+
+    fun addVideoReferenceLayer(uri: String, name: String = "ویدیو مرجع (روتوسکوپی)") {
+        val newLayer = Layer(
+            id = UUID.randomUUID().toString(),
+            name = name,
+            type = LayerType.VIDEO_REF,
+            imageUri = uri,
+            opacity = 0.5f
+        )
+        _project.update { p ->
+            p.copy(
+                layers = listOf(newLayer) + p.layers,
+                activeLayerId = newLayer.id
+            )
+        }
+        undoRedoManager.recordState(_project.value)
+    }
+
+    // --- PIN DEPTH & MIRROR ---
+    fun setPinDepth(layerId: String, pinId: String, depth: Float) {
+        _project.update { p ->
+            p.copy(
+                layers = p.layers.map { l ->
+                    if (l.id == layerId) {
+                        val mod = l.puppetModifier
+                        l.copy(
+                            puppetModifier = mod.copy(
+                                pins = mod.pins.map { pin ->
+                                    if (pin.id == pinId) pin.copy(depth = depth) else pin
+                                }
+                            )
+                        )
+                    } else l
+                }
+            )
+        }
+    }
+
+    fun togglePinMirror(layerId: String, pinId: String) {
+        _project.update { p ->
+            p.copy(
+                layers = p.layers.map { l ->
+                    if (l.id == layerId) {
+                        val mod = l.puppetModifier
+                        val targetPin = mod.pins.find { it.id == pinId } ?: return@map l
+                        val newMirrored = !targetPin.isMirrored
+
+                        // If turning mirror on, create symmetric pin if not existing
+                        val updatedPins = if (newMirrored && targetPin.mirrorPinId == null) {
+                            val mirrorPin = PuppetPin(
+                                id = UUID.randomUUID().toString(),
+                                x = -targetPin.x,
+                                y = targetPin.y,
+                                originalX = -targetPin.originalX,
+                                originalY = targetPin.originalY,
+                                weight = targetPin.weight,
+                                radius = targetPin.radius,
+                                isMirrored = true,
+                                mirrorPinId = targetPin.id
+                            )
+                            mod.pins.map { if (it.id == pinId) it.copy(isMirrored = true, mirrorPinId = mirrorPin.id) else it } + mirrorPin
+                        } else {
+                            mod.pins.map { if (it.id == pinId) it.copy(isMirrored = newMirrored) else it }
+                        }
+                        l.copy(puppetModifier = mod.copy(pins = updatedPins))
+                    } else l
+                }
+            )
+        }
+        undoRedoManager.recordState(_project.value)
     }
 }

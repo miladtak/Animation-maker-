@@ -31,7 +31,8 @@ enum class PuppetInteractionMode {
     ADD_PIN,
     MOVE_PIN,
     DELETE_PIN,
-    ROTATE_PIN
+    ROTATE_PIN,
+    MIRROR_PIN
 }
 
 @Composable
@@ -55,12 +56,14 @@ fun ContextualToolBar(
     onTextModeChange: (TextMode) -> Unit,
     onResetTransform: () -> Unit,
     onResetPuppetPose: () -> Unit,
+    isZenMode: Boolean,
+    onToggleZenMode: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Surface(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 4.dp)
+            .padding(horizontal = 8.dp, vertical = 4.dp)
             .testTag("contextual_tool_bar"),
         shape = RoundedCornerShape(12.dp),
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.95f),
@@ -70,7 +73,7 @@ fun ContextualToolBar(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 10.dp, vertical = 6.dp)
+                .padding(horizontal = 8.dp, vertical = 5.dp)
                 .horizontalScroll(rememberScrollState()),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -79,14 +82,14 @@ fun ContextualToolBar(
                 ToolType.BRUSH, ToolType.ERASER -> {
                     Text(
                         text = if (currentTool == ToolType.BRUSH) "اندازه قلم:" else "اندازه پاک‌کن:",
-                        fontSize = 12.sp,
+                        fontSize = 11.sp,
                         fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.onSurface
                     )
                     Slider(
                         value = brushSize,
                         onValueChange = onBrushSizeChange,
-                        valueRange = 4f..80f,
+                        valueRange = 4f..100f,
                         modifier = Modifier
                             .width(130.dp)
                             .testTag("brush_size_slider")
@@ -99,18 +102,18 @@ fun ContextualToolBar(
                     if (currentTool == ToolType.BRUSH) {
                         Box(
                             modifier = Modifier
-                                .size(28.dp)
+                                .size(24.dp)
                                 .clip(CircleShape)
                                 .background(currentColor)
-                                .border(2.dp, Color.White.copy(alpha = 0.7f), CircleShape)
+                                .border(1.5.dp, Color.White.copy(alpha = 0.6f), CircleShape)
                                 .clickable { onOpenColorPicker() }
-                                .testTag("brush_color_chip")
+                                .testTag("contextual_color_preview")
                         )
                     }
                 }
 
                 ToolType.PUPPET -> {
-                    // Mode Chips
+                    // Add Pin Chip
                     FilterChip(
                         selected = puppetMode == PuppetInteractionMode.ADD_PIN,
                         onClick = { onPuppetModeChange(PuppetInteractionMode.ADD_PIN) },
@@ -118,13 +121,17 @@ fun ContextualToolBar(
                         leadingIcon = { Icon(Icons.Default.AddLocation, contentDescription = null, modifier = Modifier.size(16.dp)) },
                         modifier = Modifier.testTag("puppet_chip_add_pin")
                     )
+
+                    // Move Pin Chip
                     FilterChip(
                         selected = puppetMode == PuppetInteractionMode.MOVE_PIN,
                         onClick = { onPuppetModeChange(PuppetInteractionMode.MOVE_PIN) },
                         label = { Text(stringResource(R.string.puppet_move_pin), fontSize = 11.sp) },
-                        leadingIcon = { Icon(Icons.Default.TouchApp, contentDescription = null, modifier = Modifier.size(16.dp)) },
+                        leadingIcon = { Icon(Icons.Default.OpenWith, contentDescription = null, modifier = Modifier.size(16.dp)) },
                         modifier = Modifier.testTag("puppet_chip_move_pin")
                     )
+
+                    // Delete Pin Chip
                     FilterChip(
                         selected = puppetMode == PuppetInteractionMode.DELETE_PIN,
                         onClick = { onPuppetModeChange(PuppetInteractionMode.DELETE_PIN) },
@@ -180,7 +187,7 @@ fun ContextualToolBar(
                     Box {
                         AssistChip(
                             onClick = { showPhysicsMenu = true },
-                            label = { Text("فیزیک: ${puppetModifier.physicsPreset.name}", fontSize = 11.sp) },
+                            label = { Text("فیزیک: ${getPhysicsPresetLabel(puppetModifier.physicsPreset)}", fontSize = 11.sp) },
                             leadingIcon = { Icon(Icons.Default.Science, contentDescription = null, modifier = Modifier.size(16.dp)) }
                         )
                         DropdownMenu(
@@ -189,7 +196,7 @@ fun ContextualToolBar(
                         ) {
                             PhysicsPreset.entries.forEach { p ->
                                 DropdownMenuItem(
-                                    text = { Text(p.name) },
+                                    text = { Text(getPhysicsPresetLabel(p)) },
                                     onClick = {
                                         onUpdatePuppetModifier(puppetModifier.copy(physicsPreset = p))
                                         showPhysicsMenu = false
@@ -199,12 +206,12 @@ fun ContextualToolBar(
                         }
                     }
 
-                    // Invisible Deformers
+                    // Invisible 3D Deformers (Sphere, Cylinder, Capsule, Balloon)
                     var showDeformerMenu by remember { mutableStateOf(false) }
                     Box {
                         AssistChip(
                             onClick = { showDeformerMenu = true },
-                            label = { Text("حجم: ${puppetModifier.deformerType.name}", fontSize = 11.sp) },
+                            label = { Text("حجم: ${getDeformerLabel(puppetModifier.deformerType)}", fontSize = 11.sp) },
                             leadingIcon = { Icon(Icons.Default.ViewInAr, contentDescription = null, modifier = Modifier.size(16.dp)) }
                         )
                         DropdownMenu(
@@ -213,7 +220,7 @@ fun ContextualToolBar(
                         ) {
                             InvisibleDeformerType.entries.forEach { def ->
                                 DropdownMenuItem(
-                                    text = { Text(def.name) },
+                                    text = { Text(getDeformerLabel(def)) },
                                     onClick = {
                                         onUpdatePuppetModifier(puppetModifier.copy(deformerType = def))
                                         showDeformerMenu = false
@@ -323,6 +330,45 @@ fun ContextualToolBar(
                     Text("حرکت دو انگشتی و زوم روی بوم نقاشی فعال است", fontSize = 12.sp)
                 }
             }
+
+            Spacer(Modifier.weight(1f))
+
+            // Zen Mode Quick Toggle Button
+            IconButton(
+                onClick = onToggleZenMode,
+                modifier = Modifier.size(32.dp)
+            ) {
+                Icon(
+                    if (isZenMode) Icons.Default.FullscreenExit else Icons.Default.Fullscreen,
+                    contentDescription = stringResource(if (isZenMode) R.string.exit_zen_mode else R.string.action_zen_mode),
+                    tint = if (isZenMode) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
         }
     }
+}
+
+private fun getPhysicsPresetLabel(preset: PhysicsPreset): String = when (preset) {
+    PhysicsPreset.NONE -> "دستی"
+    PhysicsPreset.CLOTH -> "پارچه"
+    PhysicsPreset.RUBBER -> "لاستیک"
+    PhysicsPreset.JELLY -> "ژله‌ای"
+    PhysicsPreset.HAIR -> "مو و خز"
+    PhysicsPreset.PLANT -> "گیاه"
+    PhysicsPreset.WIND -> "باد"
+    PhysicsPreset.WATER -> "آب"
+    PhysicsPreset.FIRE -> "آتش"
+    PhysicsPreset.BALLOON -> "بادکنک"
+    PhysicsPreset.HEAVY_STONE -> "سنگینی سنگ"
+    PhysicsPreset.WOOD -> "چوب صلب"
+    PhysicsPreset.METAL -> "فلز فنری"
+    PhysicsPreset.SPRING -> "فنر ارتجاعی"
+}
+
+private fun getDeformerLabel(deformer: InvisibleDeformerType): String = when (deformer) {
+    InvisibleDeformerType.NONE -> "هیچ‌کدام"
+    InvisibleDeformerType.CYLINDER -> "استوانه"
+    InvisibleDeformerType.SPHERE -> "کره سه‌بعدی"
+    InvisibleDeformerType.CAPSULE -> "کپسول"
+    InvisibleDeformerType.BALLOON -> "پف بادکنک"
 }

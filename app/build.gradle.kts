@@ -162,3 +162,7 @@ tasks.register<CopyApkTask>("copyApkToRoot") {
   sourceApk.set(layout.buildDirectory.file("outputs/apk/debug/app-debug.apk"))
   targetApk.set(rootProject.layout.projectDirectory.file("PuppetStudio2D.apk"))
 }
+
+afterEvaluate {
+  tasks.findByName("assembleDebug")?.finalizedBy("copyApkToRoot")
+}

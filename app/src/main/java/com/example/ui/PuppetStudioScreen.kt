@@ -1,27 +1,39 @@
 package com.example.ui
 
 import android.content.Intent
+import android.net.Uri
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SnackbarHost
-import androidx.compose.material3.SnackbarHostState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.FullscreenExit
+import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.R
 import com.example.model.PuppetModifier
 import com.example.ui.components.*
+import java.io.File
+import java.io.FileOutputStream
 
 @Composable
 fun PuppetStudioScreen(
@@ -50,176 +62,257 @@ fun PuppetStudioScreen(
     val exportProgress by viewModel.exportProgress.collectAsStateWithLifecycle()
     val exportCompleted by viewModel.exportCompleted.collectAsStateWithLifecycle()
 
+    val isHomeScreenVisible by viewModel.isHomeScreenVisible.collectAsStateWithLifecycle()
+    val isZenMode by viewModel.isZenMode.collectAsStateWithLifecycle()
+    val recentProjects by viewModel.recentProjects.collectAsStateWithLifecycle()
+
     val snackbarHostState = remember { SnackbarHostState() }
 
     val activeLayer = project.layers.find { it.id == project.activeLayerId }
     val activePuppetModifier = activeLayer?.puppetModifier ?: PuppetModifier()
 
+    // Load recent projects when screen opens
+    LaunchedEffect(Unit) {
+        viewModel.refreshRecentProjects(context)
+    }
+
+    // Import file picker launcher for .puppet2d and images
+    val fileImportLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            try {
+                val tempFile = File(context.cacheDir, "import_${System.currentTimeMillis()}.puppet2d")
+                context.contentResolver.openInputStream(uri)?.use { input ->
+                    FileOutputStream(tempFile).use { output ->
+                        input.copyTo(output)
+                    }
+                }
+                val success = viewModel.importPuppet2d(tempFile, context)
+                if (success) {
+                    Toast.makeText(context, "پروژه با موفقیت وارد شد.", Toast.LENGTH_SHORT).show()
+                } else {
+                    Toast.makeText(context, "خطا در خواندن فایل پروژه.", Toast.LENGTH_SHORT).show()
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+                Toast.makeText(context, "خطا در وارد کردن فایل: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
     // Enforce RTL layout for Persian UI overall
     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
-        Scaffold(
-            modifier = modifier.fillMaxSize().testTag("puppet_studio_scaffold"),
-            snackbarHost = { SnackbarHost(snackbarHostState) },
-            topBar = {
-                StudioTopBar(
-                    projectName = project.name,
-                    canUndo = true,
-                    canRedo = true,
-                    onUndo = { viewModel.undo() },
-                    onRedo = { viewModel.redo() },
-                    onSave = {
-                        viewModel.saveProject(context)
-                        Toast.makeText(context, "پروژه با موفقیت ذخیره شد.", Toast.LENGTH_SHORT).show()
-                    },
-                    onExport = { viewModel.toggleExportDialog(true) },
-                    onToggleLayers = { viewModel.toggleLayersPanel() },
-                    layersCount = project.layers.size,
-                    showGrid = project.settings.showGrid,
-                    onToggleGrid = {
-                        // toggle grid in settings
+        if (isHomeScreenVisible) {
+            HomeScreen(
+                recentProjects = recentProjects,
+                onSelectPreset = { preset -> viewModel.newProjectFromPreset(preset, context) },
+                onOpenProject = { id -> viewModel.openProjectById(id, context) },
+                onImportPuppet2d = { fileImportLauncher.launch("*/*") },
+                onResumeCurrentProject = { viewModel.hideHomeScreen() },
+                hasActiveProject = project.layers.isNotEmpty()
+            )
+        } else {
+            Scaffold(
+                modifier = modifier.fillMaxSize().testTag("puppet_studio_scaffold"),
+                snackbarHost = { SnackbarHost(snackbarHostState) },
+                topBar = {
+                    if (!isZenMode) {
+                        StudioTopBar(
+                            projectName = project.name,
+                            canUndo = true,
+                            canRedo = true,
+                            onUndo = { viewModel.undo() },
+                            onRedo = { viewModel.redo() },
+                            onSave = {
+                                viewModel.saveProject(context)
+                                Toast.makeText(context, "پروژه با موفقیت ذخیره شد.", Toast.LENGTH_SHORT).show()
+                            },
+                            onExport = { viewModel.toggleExportDialog(true) },
+                            onToggleLayers = { viewModel.toggleLayersPanel() },
+                            layersCount = project.layers.size,
+                            showGrid = project.settings.showGrid,
+                            onToggleGrid = {
+                                viewModel.setProjectSettings(
+                                    project.settings.copy(showGrid = !project.settings.showGrid)
+                                )
+                            },
+                            onOpenHome = {
+                                viewModel.refreshRecentProjects(context)
+                                viewModel.showHomeScreen()
+                            },
+                            isZenMode = isZenMode,
+                            onToggleZenMode = { viewModel.toggleZenMode() }
+                        )
                     }
-                )
-            },
-            bottomBar = {
-                TimelineBar(
-                    timeline = project.timeline,
-                    isPlaying = isPlaying,
-                    onPlayPauseToggle = { viewModel.togglePlayPause() },
-                    onStop = { viewModel.stopPlayback() },
-                    onSelectFrame = { viewModel.selectFrame(it) },
-                    onAddFrame = { viewModel.addFrame() },
-                    onDuplicateFrame = { viewModel.duplicateFrame() },
-                    onDeleteFrame = { viewModel.deleteFrame() },
-                    onToggleLoop = { viewModel.toggleLoop() },
-                    onToggleOnionSkin = { viewModel.toggleOnionSkin() },
-                    onFpsChange = { viewModel.changeFps(it) },
-                    onOpenNewTimelineDialog = { viewModel.toggleNewTimelineDialog(true) },
-                    onAddAudioTrack = { viewModel.addAudioTrack() }
-                )
-            }
-        ) { innerPadding ->
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(innerPadding)
-            ) {
-                // Central Interactive Canvas (kept LTR for technical coordinates/rulers)
-                CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
-                    PuppetCanvas(
-                        project = project,
-                        activeTool = activeTool,
-                        puppetMode = puppetMode,
-                        brushSize = brushSize,
-                        brushColor = brushColor,
-                        viewportOffset = viewportOffset,
-                        onViewportOffsetChange = { viewModel.setViewportOffset(it) },
-                        zoomScale = zoomScale,
-                        onZoomScaleChange = { viewModel.setZoomScale(it) },
-                        onAddStrokePoint = { pt, isEraser -> viewModel.addStrokePoint(pt, isEraser) },
-                        onFinishStroke = { viewModel.finishStroke() },
-                        onUpdateLayerTransform = { id, t, commit -> viewModel.updateLayerTransform(id, t, commit) },
-                        onAddPuppetPin = { lId, x, y -> viewModel.addPuppetPin(lId, x, y) },
-                        onMovePuppetPin = { lId, pId, x, y, commit -> viewModel.movePuppetPin(lId, pId, x, y, commit) },
-                        onDeletePuppetPin = { lId, pId -> viewModel.deletePuppetPin(lId, pId) },
-                        modifier = Modifier.fillMaxSize()
-                    )
+                },
+                bottomBar = {
+                    if (!isZenMode) {
+                        TimelineBar(
+                            timeline = project.timeline,
+                            isPlaying = isPlaying,
+                            onPlayPauseToggle = { viewModel.togglePlayPause() },
+                            onStop = { viewModel.stopPlayback() },
+                            onSelectFrame = { viewModel.selectFrame(it) },
+                            onAddFrame = { viewModel.addFrame() },
+                            onDuplicateFrame = { viewModel.duplicateFrame() },
+                            onDeleteFrame = { viewModel.deleteFrame() },
+                            onToggleLoop = { viewModel.toggleLoop() },
+                            onToggleOnionSkin = { viewModel.toggleOnionSkin() },
+                            onFpsChange = { viewModel.changeFps(it) },
+                            onOpenNewTimelineDialog = { viewModel.toggleNewTimelineDialog(true) },
+                            onAddAudioTrack = { viewModel.addAudioTrack() }
+                        )
+                    }
                 }
-
-                // Top Contextual Tool Options Bar (Floats directly beneath top bar)
-                ContextualToolBar(
-                    currentTool = activeTool,
-                    brushSize = brushSize,
-                    onBrushSizeChange = { viewModel.setBrushSize(it) },
-                    currentColor = brushColor,
-                    onOpenColorPicker = { viewModel.toggleColorPicker(true) },
-                    puppetMode = puppetMode,
-                    onPuppetModeChange = { viewModel.setPuppetMode(it) },
-                    puppetModifier = activePuppetModifier,
-                    onUpdatePuppetModifier = { activeLayer?.let { l -> viewModel.updatePuppetModifier(l.id, it) } },
-                    selectedShapeType = selectedShapeType,
-                    onShapeTypeChange = { viewModel.setSelectedShapeType(it) },
-                    isShapeFilled = isShapeFilled,
-                    onToggleShapeFilled = { viewModel.toggleShapeFilled() },
-                    currentText = currentText,
-                    onTextChange = { viewModel.setCurrentText(it) },
-                    textMode = textMode,
-                    onTextModeChange = { viewModel.setTextMode(it) },
-                    onResetTransform = { activeLayer?.let { viewModel.resetTransform(it.id) } },
-                    onResetPuppetPose = { activeLayer?.let { viewModel.resetPuppetPose(it.id) } },
+            ) { innerPadding ->
+                Box(
                     modifier = Modifier
-                        .align(Alignment.TopCenter)
-                        .padding(top = 8.dp)
-                )
-
-                // Vertical Tool Bar on Right/Left edge
-                StudioToolBar(
-                    activeTool = activeTool,
-                    onSelectTool = { viewModel.selectTool(it) },
-                    modifier = Modifier
-                        .align(Alignment.CenterStart)
-                        .padding(start = 8.dp)
-                )
-
-                // Slide-in Layers Panel
-                AnimatedVisibility(
-                    visible = showLayersPanel,
-                    enter = slideInHorizontally(initialOffsetX = { it }),
-                    exit = slideOutHorizontally(targetOffsetX = { it }),
-                    modifier = Modifier.align(Alignment.CenterEnd)
+                        .fillMaxSize()
+                        .padding(if (isZenMode) PaddingValues(0.dp) else innerPadding)
                 ) {
-                    LayersPanel(
-                        layers = project.layers,
-                        activeLayerId = project.activeLayerId,
-                        onSelectLayer = { viewModel.selectLayer(it) },
-                        onToggleVisibility = { viewModel.toggleLayerVisibility(it) },
-                        onToggleLock = { viewModel.toggleLayerLock(it) },
-                        onOpacityChange = { id, op -> viewModel.updateLayerOpacity(id, op) },
-                        onBlendModeChange = { id, bm -> viewModel.updateLayerBlendMode(id, bm) },
-                        onAddLayer = { viewModel.addLayer(it) },
-                        onDuplicateLayer = { viewModel.duplicateLayer(it) },
-                        onDeleteLayer = { viewModel.deleteLayer(it) },
-                        onMoveLayerUp = { viewModel.moveLayerUp(it) },
-                        onMoveLayerDown = { viewModel.moveLayerDown(it) },
-                        onClose = { viewModel.toggleLayersPanel() }
-                    )
-                }
+                    // Central Interactive Canvas (kept LTR for technical coordinates/rulers)
+                    CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+                        PuppetCanvas(
+                            project = project,
+                            activeTool = activeTool,
+                            puppetMode = puppetMode,
+                            brushSize = brushSize,
+                            brushColor = brushColor,
+                            viewportOffset = viewportOffset,
+                            onViewportOffsetChange = { viewModel.setViewportOffset(it) },
+                            zoomScale = zoomScale,
+                            onZoomScaleChange = { viewModel.setZoomScale(it) },
+                            onAddStrokePoint = { pt, isEraser -> viewModel.addStrokePoint(pt, isEraser) },
+                            onFinishStroke = { viewModel.finishStroke() },
+                            onUpdateLayerTransform = { id, t, commit -> viewModel.updateLayerTransform(id, t, commit) },
+                            onAddPuppetPin = { lId, x, y -> viewModel.addPuppetPin(lId, x, y) },
+                            onMovePuppetPin = { lId, pId, x, y, commit -> viewModel.movePuppetPin(lId, pId, x, y, commit) },
+                            onDeletePuppetPin = { lId, pId -> viewModel.deletePuppetPin(lId, pId) },
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    }
 
-                // Safe Color Picker Dialog
-                if (showColorPicker) {
-                    SafeColorPickerDialog(
-                        initialColor = brushColor,
-                        onColorSelected = { col ->
-                            viewModel.setBrushColor(col)
-                            viewModel.toggleColorPicker(false)
-                        },
-                        onDismiss = { viewModel.toggleColorPicker(false) }
-                    )
-                }
+                    // Top Contextual Tool Options Bar (Visible when not in Zen Mode)
+                    if (!isZenMode) {
+                        ContextualToolBar(
+                            currentTool = activeTool,
+                            brushSize = brushSize,
+                            onBrushSizeChange = { viewModel.setBrushSize(it) },
+                            currentColor = brushColor,
+                            onOpenColorPicker = { viewModel.toggleColorPicker(true) },
+                            puppetMode = puppetMode,
+                            onPuppetModeChange = { viewModel.setPuppetMode(it) },
+                            puppetModifier = activePuppetModifier,
+                            onUpdatePuppetModifier = { activeLayer?.let { l -> viewModel.updatePuppetModifier(l.id, it) } },
+                            selectedShapeType = selectedShapeType,
+                            onShapeTypeChange = { viewModel.setSelectedShapeType(it) },
+                            isShapeFilled = isShapeFilled,
+                            onToggleShapeFilled = { viewModel.toggleShapeFilled() },
+                            currentText = currentText,
+                            onTextChange = { viewModel.setCurrentText(it) },
+                            textMode = textMode,
+                            onTextModeChange = { viewModel.setTextMode(it) },
+                            onResetTransform = { activeLayer?.let { viewModel.resetTransform(it.id) } },
+                            onResetPuppetPose = { activeLayer?.let { viewModel.resetPuppetPose(it.id) } },
+                            isZenMode = isZenMode,
+                            onToggleZenMode = { viewModel.toggleZenMode() },
+                            modifier = Modifier
+                                .align(Alignment.TopCenter)
+                                .padding(top = 8.dp)
+                        )
+                    }
 
-                // New Timeline Dialog
-                if (showNewTimelineDialog) {
-                    NewTimelineDialog(
-                        onSelectMode = { mode -> viewModel.createTimeline(mode) },
-                        onDismiss = { viewModel.toggleNewTimelineDialog(false) }
-                    )
-                }
+                    // Vertical Tool Bar on Side edge (Visible when not in Zen Mode)
+                    if (!isZenMode) {
+                        StudioToolBar(
+                            activeTool = activeTool,
+                            onSelectTool = { viewModel.selectTool(it) },
+                            modifier = Modifier
+                                .align(Alignment.CenterStart)
+                                .padding(start = 8.dp)
+                        )
+                    }
 
-                // Export Dialog
-                if (showExportDialog) {
-                    ExportDialog(
-                        isExporting = isExporting,
-                        exportProgress = exportProgress,
-                        onStartExport = { format -> viewModel.startExport(context, format) },
-                        onCancel = { viewModel.toggleExportDialog(false) },
-                        onShare = {
-                            val shareIntent = Intent(Intent.ACTION_SEND).apply {
-                                type = "image/png"
-                                putExtra(Intent.EXTRA_TEXT, "خروجی انیمیشن ساخته شده با Puppet Studio 2D")
-                            }
-                            context.startActivity(Intent.createChooser(shareIntent, "اشتراک‌گذاری انیمیشن"))
-                        },
-                        exportCompleted = exportCompleted
-                    )
+                    // Floating Exit Button for Zen Mode
+                    if (isZenMode) {
+                        ElevatedButton(
+                            onClick = { viewModel.exitZenMode() },
+                            modifier = Modifier
+                                .align(Alignment.TopStart)
+                                .padding(16.dp),
+                            shape = RoundedCornerShape(20.dp),
+                            colors = ButtonDefaults.elevatedButtonColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.85f)
+                            )
+                        ) {
+                            Icon(Icons.Default.FullscreenExit, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text(stringResource(R.string.exit_zen_mode), fontSize = 11.sp)
+                        }
+                    }
+
+                    // Slide-in Layers Panel
+                    AnimatedVisibility(
+                        visible = showLayersPanel && !isZenMode,
+                        enter = slideInHorizontally(initialOffsetX = { it }),
+                        exit = slideOutHorizontally(targetOffsetX = { it }),
+                        modifier = Modifier.align(Alignment.CenterEnd)
+                    ) {
+                        LayersPanel(
+                            layers = project.layers,
+                            activeLayerId = project.activeLayerId,
+                            onSelectLayer = { viewModel.selectLayer(it) },
+                            onToggleVisibility = { viewModel.toggleLayerVisibility(it) },
+                            onToggleLock = { viewModel.toggleLayerLock(it) },
+                            onOpacityChange = { id, op -> viewModel.updateLayerOpacity(id, op) },
+                            onBlendModeChange = { id, bm -> viewModel.updateLayerBlendMode(id, bm) },
+                            onAddLayer = { viewModel.addLayer(it) },
+                            onDuplicateLayer = { viewModel.duplicateLayer(it) },
+                            onDeleteLayer = { viewModel.deleteLayer(it) },
+                            onMoveLayerUp = { viewModel.moveLayerUp(it) },
+                            onMoveLayerDown = { viewModel.moveLayerDown(it) },
+                            onClose = { viewModel.toggleLayersPanel() }
+                        )
+                    }
+
+                    // Safe Color Picker Dialog
+                    if (showColorPicker) {
+                        SafeColorPickerDialog(
+                            initialColor = brushColor,
+                            onColorSelected = { col ->
+                                viewModel.setBrushColor(col)
+                                viewModel.toggleColorPicker(false)
+                            },
+                            onDismiss = { viewModel.toggleColorPicker(false) }
+                        )
+                    }
+
+                    // New Timeline Dialog
+                    if (showNewTimelineDialog) {
+                        NewTimelineDialog(
+                            onSelectMode = { mode -> viewModel.createTimeline(mode) },
+                            onDismiss = { viewModel.toggleNewTimelineDialog(false) }
+                        )
+                    }
+
+                    // Export Dialog
+                    if (showExportDialog) {
+                        ExportDialog(
+                            isExporting = isExporting,
+                            exportProgress = exportProgress,
+                            onStartExport = { format -> viewModel.startExport(context, format) },
+                            onCancel = { viewModel.toggleExportDialog(false) },
+                            onShare = {
+                                val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                                    type = "image/png"
+                                    putExtra(Intent.EXTRA_TEXT, "خروجی انیمیشن ساخته شده با Puppet Studio 2D")
+                                }
+                                context.startActivity(Intent.createChooser(shareIntent, "اشتراک‌گذاری انیمیشن"))
+                            },
+                            exportCompleted = exportCompleted
+                        )
+                    }
                 }
             }
         }

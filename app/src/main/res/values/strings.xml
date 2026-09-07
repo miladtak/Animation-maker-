@@ -56,6 +56,65 @@
     <string name="preset_water">آب کارتونی (Water)</string>
     <string name="preset_fire">آتش کارتونی (Fire)</string>
     <string name="preset_balloon">بادکنک / پف‌کردن (Balloon)</string>
+    <string name="preset_heavy_stone">سنگینی سنگ (Stone)</string>
+    <string name="preset_wood">چوب صلب (Wood)</string>
+    <string name="preset_metal">فلز فنری (Metal)</string>
+    <string name="preset_spring">فنر ارتجاعی (Spring)</string>
+
+    <!-- Home Screen -->
+    <string name="home_title">Puppet Studio 2D</string>
+    <string name="home_subtitle">استودیوی پیشرفته طراحی و انیمیشن ۲بعدی</string>
+    <string name="home_new_project">پروژه جدید</string>
+    <string name="home_recent_projects">پروژه‌های اخیر</string>
+    <string name="home_open_project">باز کردن پروژه (.puppet2d)</string>
+    <string name="home_settings">تنظیمات استودیو</string>
+    <string name="home_guide">آموزش و راهنما</string>
+    <string name="home_preset_story">استوری / ریلز (۱۰۸۰×۱۹۲۰)</string>
+    <string name="home_preset_cinema">یوتیوب و سینمایی (۱۹۲۰×۱۰۸۰)</string>
+    <string name="home_preset_square">پست اینستاگرام (۱۰۸۰×۱۰۸۰)</string>
+    <string name="home_preset_custom">سایز دلخواه بوم</string>
+    <string name="home_no_recent_projects">هنوز پروژه‌ای ساخته نشده است</string>
+
+    <!-- Zen & View Modes -->
+    <string name="action_zen_mode">حالت تمرکز (Zen Mode)</string>
+    <string name="exit_zen_mode">خروج از حالت تمرکز</string>
+
+    <!-- Pin Advanced Features -->
+    <string name="puppet_mirror_pin">پین آینه‌ای (Mirror)</string>
+    <string name="puppet_record_mode">ضبط زنده پین (Record)</string>
+    <string name="puppet_pin_depth">عمق پین (Z-Depth)</string>
+    <string name="puppet_pin_group">گروه پین</string>
+    <string name="puppet_weight_brush">براش وزن</string>
+    <string name="puppet_copy_deform">کپی حالت به فریم‌ها</string>
+
+    <!-- Blend Modes -->
+    <string name="blend_normal">Normal (عادی)</string>
+    <string name="blend_multiply">Multiply (ضرب)</string>
+    <string name="blend_screen">Screen (روشن‌کننده)</string>
+    <string name="blend_overlay">Overlay (پوشش)</string>
+    <string name="blend_darken">Darken (تیره‌تر)</string>
+    <string name="blend_lighten">Lighten (روشن‌تر)</string>
+    <string name="blend_color_dodge">Color Dodge</string>
+    <string name="blend_color_burn">Color Burn</string>
+    <string name="blend_hard_light">Hard Light</string>
+    <string name="blend_soft_light">Soft Light</string>
+    <string name="blend_difference">Difference (تفاضل)</string>
+    <string name="blend_exclusion">Exclusion</string>
+    <string name="blend_hue">Hue (ته‌رنگ)</string>
+    <string name="blend_saturation">Saturation (غلظت)</string>
+    <string name="blend_color">Color (رنگ)</string>
+    <string name="blend_luminosity">Luminosity (روشنایی)</string>
+
+    <!-- Style & Geometry -->
+    <string name="panel_style">استایل</string>
+    <string name="panel_geometry">هندسه</string>
+    <string name="fill_color">رنگ پرکردن</string>
+    <string name="stroke_color">رنگ خط دور</string>
+    <string name="stroke_width">ضخامت خط دور</string>
+    <string name="position_x">موقعیت افقی (X)</string>
+    <string name="position_y">موقعیت عمودی (Y)</string>
+    <string name="scale_factor">مقیاس</string>
+    <string name="rotation_angle">زاویه چرخش</string>
 
     <!-- Layers -->
     <string name="layers_title">لایه‌ها</string>

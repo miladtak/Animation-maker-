@@ -27,10 +27,18 @@ enum class BlendModeType {
     MULTIPLY,
     SCREEN,
     OVERLAY,
-    ADD,
     DARKEN,
     LIGHTEN,
-    DIFFERENCE
+    COLOR_DODGE,
+    COLOR_BURN,
+    HARD_LIGHT,
+    SOFT_LIGHT,
+    DIFFERENCE,
+    EXCLUSION,
+    HUE,
+    SATURATION,
+    COLOR,
+    LUMINOSITY
 }
 
 enum class ShapeType {
@@ -71,7 +79,11 @@ enum class PhysicsPreset {
     WIND,
     WATER,
     FIRE,
-    BALLOON
+    BALLOON,
+    HEAVY_STONE,
+    WOOD,
+    METAL,
+    SPRING
 }
 
 enum class MeshDensity(val cols: Int, val rows: Int) {
@@ -84,7 +96,8 @@ enum class InvisibleDeformerType {
     NONE,
     SPHERE,
     CYLINDER,
-    CAPSULE
+    CAPSULE,
+    BALLOON
 }
 
 enum class RulerUnit(val factorFromPx: Float, val label: String) {
@@ -95,9 +108,17 @@ enum class RulerUnit(val factorFromPx: Float, val label: String) {
     CENTIMETERS(2.54f / 160f, "cm")
 }
 
+enum class CanvasPreset(val title: String, val width: Float, val height: Float, val ratioLabel: String) {
+    STORY_9_16("استوری / ریلز", 1080f, 1920f, "9:16"),
+    CINEMATIC_16_9("سینمایی / یوتیوب", 1920f, 1080f, "16:9"),
+    SQUARE_1_1("پست اینستاگرام", 1080f, 1080f, "1:1"),
+    CUSTOM("اندازه دلخواه", 1080f, 1080f, "دلخواه")
+}
+
 data class PointData(
     val x: Float = 0f,
-    val y: Float = 0f
+    val y: Float = 0f,
+    val pressure: Float = 1.0f
 )
 
 data class TriangleIndices(
@@ -135,7 +156,11 @@ data class PuppetPin(
     val velocityY: Float = 0f,
     val radius: Float = 90f,
     val angle: Float = 0f,
-    val scale: Float = 1f
+    val scale: Float = 1f,
+    val depth: Float = 0f,
+    val group: Int = 0,
+    val isMirrored: Boolean = false,
+    val mirrorPinId: String? = null
 )
 
 data class PuppetModifier(
@@ -246,6 +271,24 @@ data class ProjectSettings(
     val gridSpacing: Float = 40f
 )
 
+data class Scene(
+    val id: String = UUID.randomUUID().toString(),
+    val name: String = "صحنه ۱",
+    val timeline: Timeline = Timeline(),
+    val layers: List<Layer> = emptyList(),
+    val frames: List<Frame> = emptyList()
+)
+
+data class ProjectMetadata(
+    val id: String,
+    val name: String,
+    val lastModified: Long = System.currentTimeMillis(),
+    val canvasWidth: Float = 1080f,
+    val canvasHeight: Float = 1080f,
+    val layersCount: Int = 1,
+    val totalFrames: Int = 24
+)
+
 data class Project(
     val id: String = UUID.randomUUID().toString(),
     val name: String = "پروژه انیمیشن من",
@@ -255,5 +298,7 @@ data class Project(
     val activeLayerId: String = "",
     val timeline: Timeline = Timeline(),
     val frames: List<Frame> = emptyList(),
+    val scenes: List<Scene> = emptyList(),
+    val activeSceneIndex: Int = 0,
     val settings: ProjectSettings = ProjectSettings()
 )

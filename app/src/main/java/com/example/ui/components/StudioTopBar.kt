@@ -30,9 +30,21 @@ fun StudioTopBar(
     onToggleLayers: () -> Unit,
     layersCount: Int,
     showGrid: Boolean,
-    onToggleGrid: () -> Unit
+    onToggleGrid: () -> Unit,
+    onOpenHome: () -> Unit,
+    isZenMode: Boolean = false,
+    onToggleZenMode: () -> Unit = {}
 ) {
     TopAppBar(
+        navigationIcon = {
+            IconButton(onClick = onOpenHome, modifier = Modifier.testTag("top_home_button")) {
+                Icon(
+                    Icons.Default.Home,
+                    contentDescription = stringResource(R.string.home_title),
+                    tint = StudioAccent
+                )
+            }
+        },
         title = {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(
@@ -58,6 +70,14 @@ fun StudioTopBar(
             }
         },
         actions = {
+            // Zen Mode
+            IconButton(onClick = onToggleZenMode, modifier = Modifier.testTag("top_zen_button")) {
+                Icon(
+                    if (isZenMode) Icons.Default.FullscreenExit else Icons.Default.Fullscreen,
+                    contentDescription = stringResource(if (isZenMode) R.string.exit_zen_mode else R.string.action_zen_mode),
+                    tint = if (isZenMode) StudioAccent else MaterialTheme.colorScheme.onSurface
+                )
+            }
             // Undo
             IconButton(
                 onClick = onUndo,

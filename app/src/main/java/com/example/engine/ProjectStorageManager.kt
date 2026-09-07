@@ -91,6 +91,10 @@ object ProjectStorageManager {
                 pObj.put("weight", pin.weight.toDouble())
                 pObj.put("radius", pin.radius.toDouble())
                 pObj.put("type", pin.pinType.name)
+                pObj.put("depth", pin.depth.toDouble())
+                pObj.put("group", pin.group)
+                pObj.put("isMirrored", pin.isMirrored)
+                pin.mirrorPinId?.let { pObj.put("mirrorPinId", it) }
                 pinsArray.put(pObj)
             }
             puppetObj.put("pins", pinsArray)
@@ -219,7 +223,11 @@ object ProjectStorageManager {
                                         originalY = pinJson.optDouble("oy", 0.0).toFloat(),
                                         weight = pinJson.optDouble("weight", 1.0).toFloat(),
                                         radius = pinJson.optDouble("radius", 90.0).toFloat(),
-                                        pinType = PinType.valueOf(pinJson.optString("type", PinType.STATIC.name))
+                                        pinType = PinType.valueOf(pinJson.optString("type", PinType.STATIC.name)),
+                                        depth = pinJson.optDouble("depth", 0.0).toFloat(),
+                                        group = pinJson.optInt("group", 0),
+                                        isMirrored = pinJson.optBoolean("isMirrored", false),
+                                        mirrorPinId = if (pinJson.has("mirrorPinId")) pinJson.getString("mirrorPinId") else null
                                     )
                                 )
                             }
@@ -299,11 +307,14 @@ object ProjectStorageManager {
         }
     }
 
+    private const val RECENT_PROJECTS_FILE = "puppet_recent_projects.json"
+
     fun autosaveProject(context: Context, project: Project) {
         try {
             val json = saveProjectToJson(project)
             val file = File(context.filesDir, AUTOSAVE_FILE_NAME)
             file.writeText(json)
+            saveToRecentProjects(context, project)
         } catch (e: Exception) {
             e.printStackTrace()
         }
@@ -318,5 +329,122 @@ object ProjectStorageManager {
         } catch (e: Exception) {
             null
         }
+    }
+
+    fun exportToPuppet2dFile(project: Project, destinationFile: File): Boolean {
+        return try {
+            val json = saveProjectToJson(project)
+            java.util.zip.ZipOutputStream(destinationFile.outputStream()).use { zipOut ->
+                val entry = java.util.zip.ZipEntry("project.json")
+                zipOut.putNextEntry(entry)
+                zipOut.write(json.toByteArray(Charsets.UTF_8))
+                zipOut.closeEntry()
+            }
+            true
+        } catch (e: Exception) {
+            e.printStackTrace()
+            false
+        }
+    }
+
+    fun importFromPuppet2dFile(sourceFile: File): Project? {
+        return try {
+            java.util.zip.ZipInputStream(sourceFile.inputStream()).use { zipIn ->
+                var entry = zipIn.nextEntry
+                while (entry != null) {
+                    if (entry.name == "project.json") {
+                        val jsonString = zipIn.bufferedReader(Charsets.UTF_8).readText()
+                        return loadProjectFromJson(jsonString)
+                    }
+                    entry = zipIn.nextEntry
+                }
+            }
+            null
+        } catch (e: Exception) {
+            e.printStackTrace()
+            null
+        }
+    }
+
+    fun getRecentProjects(context: Context): List<ProjectMetadata> {
+        val file = File(context.filesDir, RECENT_PROJECTS_FILE)
+        if (!file.exists()) return emptyList()
+        return try {
+            val jsonArr = JSONArray(file.readText())
+            val list = mutableListOf<ProjectMetadata>()
+            for (i in 0 until jsonArr.length()) {
+                val obj = jsonArr.getJSONObject(i)
+                list.add(
+                    ProjectMetadata(
+                        id = obj.optString("id"),
+                        name = obj.optString("name"),
+                        lastModified = obj.optLong("lastModified", System.currentTimeMillis()),
+                        canvasWidth = obj.optDouble("canvasWidth", 1080.0).toFloat(),
+                        canvasHeight = obj.optDouble("canvasHeight", 1080.0).toFloat(),
+                        layersCount = obj.optInt("layersCount", 1),
+                        totalFrames = obj.optInt("totalFrames", 24)
+                    )
+                )
+            }
+            list.sortedByDescending { it.lastModified }
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
+    fun saveToRecentProjects(context: Context, project: Project) {
+        try {
+            val current = getRecentProjects(context).filter { it.id != project.id }.toMutableList()
+            current.add(
+                0,
+                ProjectMetadata(
+                    id = project.id,
+                    name = project.name,
+                    lastModified = System.currentTimeMillis(),
+                    canvasWidth = project.canvasWidth,
+                    canvasHeight = project.canvasHeight,
+                    layersCount = project.layers.size,
+                    totalFrames = project.timeline.totalFrames
+                )
+            )
+            val jsonArr = JSONArray()
+            current.take(20).forEach { item ->
+                val obj = JSONObject()
+                obj.put("id", item.id)
+                obj.put("name", item.name)
+                obj.put("lastModified", item.lastModified)
+                obj.put("canvasWidth", item.canvasWidth.toDouble())
+                obj.put("canvasHeight", item.canvasHeight.toDouble())
+                obj.put("layersCount", item.layersCount)
+                obj.put("totalFrames", item.totalFrames)
+                jsonArr.put(obj)
+            }
+            File(context.filesDir, RECENT_PROJECTS_FILE).writeText(jsonArr.toString())
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    fun createPresetProject(preset: CanvasPreset, name: String = "پروژه جدید"): Project {
+        val baseLayerId = java.util.UUID.randomUUID().toString()
+        val baseLayer = Layer(
+            id = baseLayerId,
+            name = "لایه نقاشی ۱",
+            type = LayerType.RASTER
+        )
+        return Project(
+            id = java.util.UUID.randomUUID().toString(),
+            name = name,
+            canvasWidth = preset.width,
+            canvasHeight = preset.height,
+            layers = listOf(baseLayer),
+            activeLayerId = baseLayerId,
+            timeline = Timeline(
+                id = java.util.UUID.randomUUID().toString(),
+                name = "تایم‌لاین اصلی",
+                totalFrames = 24,
+                fps = 24
+            )
+        )
     }
 }
