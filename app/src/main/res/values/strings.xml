@@ -1,0 +1,124 @@
+<resources>
+    <string name="app_name">Puppet Studio 2D</string>
+
+    <!-- General UI & Menus -->
+    <string name="menu_file">فایل</string>
+    <string name="menu_new_project">پروژه جدید</string>
+    <string name="menu_save_project">ذخیره پروژه</string>
+    <string name="menu_open_project">باز کردن پروژه</string>
+    <string name="menu_export">خروجی</string>
+    <string name="menu_settings">تنظیمات</string>
+    <string name="action_undo">بازگشت (Undo)</string>
+    <string name="action_redo">انجام مجدد (Redo)</string>
+    <string name="action_cancel">انصراف</string>
+    <string name="action_confirm">تأیید</string>
+    <string name="action_delete">حذف</string>
+    <string name="action_duplicate">تکثیر</string>
+    <string name="action_reset">بازنشانی</string>
+    <string name="action_close">بستن</string>
+    <string name="action_share">اشتراک‌گذاری</string>
+
+    <!-- Tools -->
+    <string name="tool_select">انتخاب و جابه‌جایی</string>
+    <string name="tool_brush">قلم‌مو (Brush)</string>
+    <string name="tool_eraser">پاک‌کن (Eraser)</string>
+    <string name="tool_shapes">اشکال هندسی</string>
+    <string name="tool_text">ابزار متن</string>
+    <string name="tool_puppet">تغییر شکل پاپت (Puppet Warp)</string>
+    <string name="tool_color">انتخاب رنگ</string>
+    <string name="tool_hand">دست / جابه‌جایی بوم</string>
+    <string name="tool_zoom">بزرگ‌نمایی</string>
+
+    <!-- Puppet Warp / Deform -->
+    <string name="puppet_add_pin">افزودن پین</string>
+    <string name="puppet_move_pin">جابه‌جایی پین</string>
+    <string name="puppet_rotate_pin">چرخش پین</string>
+    <string name="puppet_scale_pin">مقیاس پین</string>
+    <string name="puppet_delete_pin">حذف پین</string>
+    <string name="puppet_reset_pose">حالت اولیه</string>
+    <string name="puppet_show_mesh">نمایش مش</string>
+    <string name="puppet_mesh_density">تراکم مش</string>
+    <string name="puppet_density_low">کم</string>
+    <string name="puppet_density_medium">متوسط</string>
+    <string name="puppet_density_high">زیاد</string>
+    <string name="puppet_pin_count">تعداد پین‌ها: %1$d</string>
+    <string name="puppet_physics">پریست‌های فیزیک</string>
+    <string name="puppet_invisible_deformers">احجام نامرئی (کره/استوانه)</string>
+
+    <!-- Physics Presets -->
+    <string name="preset_none">بدون فیزیک (دستی)</string>
+    <string name="preset_cloth">پارچه / پرده (Cloth)</string>
+    <string name="preset_rubber">لاستیک و فنر (Rubber)</string>
+    <string name="preset_jelly">ژله‌ای (Jelly)</string>
+    <string name="preset_hair">مو و خز (Hair)</string>
+    <string name="preset_plant">گیاه و برگ (Plant)</string>
+    <string name="preset_wind">وزش باد (Wind)</string>
+    <string name="preset_water">آب کارتونی (Water)</string>
+    <string name="preset_fire">آتش کارتونی (Fire)</string>
+    <string name="preset_balloon">بادکنک / پف‌کردن (Balloon)</string>
+
+    <!-- Layers -->
+    <string name="layers_title">لایه‌ها</string>
+    <string name="layer_add">لایه جدید</string>
+    <string name="layer_add_raster">لایه نقاشی (Raster)</string>
+    <string name="layer_add_image">وارد کردن عکس</string>
+    <string name="layer_add_video_ref">ویدیو مرجع (روتوسکوپی)</string>
+    <string name="layer_add_shape">لایه شکل</string>
+    <string name="layer_add_text">لایه متن</string>
+    <string name="layer_opacity">شفافیت: %1$d%%</string>
+    <string name="layer_blend_mode">حالت آمیختگی (Blend)</string>
+    <string name="layer_visible">نمایش لایه</string>
+    <string name="layer_lock">قفل لایه</string>
+    <string name="layer_empty">لایه‌ای انتخاب نشده است</string>
+
+    <!-- Timeline & Animation -->
+    <string name="timeline_title">تایم‌لاین</string>
+    <string name="timeline_play">پخش</string>
+    <string name="timeline_pause">توقف</string>
+    <string name="timeline_loop">حالت تکرار</string>
+    <string name="timeline_add_frame">افزودن فریم</string>
+    <string name="timeline_delete_frame">حذف فریم</string>
+    <string name="timeline_onion_skin">پوست پیازی (Onion Skin)</string>
+    <string name="timeline_fps">نرخ فریم: %1$d FPS</string>
+    <string name="timeline_new_dialog_title">ایجاد تایم‌لاین جدید</string>
+    <string name="timeline_mode_duplicate">تکثیر از صحنه فعلی (توصیه شده)</string>
+    <string name="timeline_mode_linked">وابسته به صحنه فعلی</string>
+    <string name="timeline_mode_blank">تایم‌لاین کاملاً خالی</string>
+    <string name="timeline_blank_confirm_msg">آیا از ایجاد تایم‌لاین خالی اطمینان دارید؟ تمام محتوای فریم‌های جدید از نو شروع خواهد شد.</string>
+    <string name="timeline_audio_track">ترک صوتی</string>
+    <string name="timeline_add_audio">افزودن صوت</string>
+
+    <!-- Shapes & Text -->
+    <string name="shape_rect">مستطیل</string>
+    <string name="shape_circle">دایره</string>
+    <string name="shape_triangle">مثلث</string>
+    <string name="shape_star">ستاره</string>
+    <string name="shape_cube">مکعب 2.5D</string>
+    <string name="text_input_hint">متن مورد نظر را بنویسید…</string>
+    <string name="text_mode_normal">ساده</string>
+    <string name="text_mode_3d">نیمه‌سه‌بعدی (3D Extrude)</string>
+    <string name="text_mode_arc">روی منحنی (Arc)</string>
+
+    <!-- Color Picker -->
+    <string name="color_picker_title">انتخاب امن رنگ</string>
+    <string name="color_hex">کد هگز:</string>
+    <string name="color_red">قرمز (R)</string>
+    <string name="color_green">سبز (G)</string>
+    <string name="color_blue">آبی (B)</string>
+    <string name="color_alpha">شفافیت (Alpha)</string>
+
+    <!-- Export -->
+    <string name="export_title">خروجی انیمیشن</string>
+    <string name="export_mp4">ویدیوی MP4</string>
+    <string name="export_gif">تصویر متحرک GIF</string>
+    <string name="export_png_sequence">مجموعه فریم‌های PNG</string>
+    <string name="export_current_frame">تک‌فریم PNG فعلی</string>
+    <string name="export_progress">در حال ایجاد خروجی…</string>
+    <string name="export_success">خروجی با موفقیت در حافظه ذخیره شد!</string>
+    <string name="export_error">خطا در فرآیند استخراج خروجی.</string>
+
+    <!-- Project Save/Load -->
+    <string name="project_saved">پروژه با موفقیت ذخیره شد.</string>
+    <string name="project_loaded">پروژه با موفقیت بارگذاری شد.</string>
+    <string name="project_autosaved">ذخیره خودکار انجام شد.</string>
+</resources>

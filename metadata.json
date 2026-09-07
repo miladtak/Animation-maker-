@@ -1,0 +1,6 @@
+{
+  "name": "Puppet Studio 2D",
+  "description": "استودیوی ساخت انیمیشن دوبعدی و تغییر شکل پاپت با لایه‌ها و تایم‌لاین شبیه فتوشاپ",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
