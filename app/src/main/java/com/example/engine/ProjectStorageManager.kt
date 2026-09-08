@@ -98,6 +98,23 @@ object ProjectStorageManager {
                 pinsArray.put(pObj)
             }
             puppetObj.put("pins", pinsArray)
+
+            val bonesArray = JSONArray()
+            for (bone in layer.puppetModifier.bones) {
+                val bObj = JSONObject()
+                bObj.put("id", bone.id)
+                bObj.put("name", bone.name)
+                bone.parentId?.let { bObj.put("parentId", it) }
+                bObj.put("sx", bone.startX.toDouble())
+                bObj.put("sy", bone.startY.toDouble())
+                bObj.put("len", bone.length.toDouble())
+                bObj.put("ang", bone.angle.toDouble())
+                bObj.put("col", bone.color)
+                bObj.put("ctrl", bone.controlShape.name)
+                bonesArray.put(bObj)
+            }
+            puppetObj.put("bones", bonesArray)
+            puppetObj.put("showBones", layer.puppetModifier.showBones)
             layerObj.put("puppet", puppetObj)
 
             // Shapes & Text
@@ -232,13 +249,38 @@ object ProjectStorageManager {
                                 )
                             }
                         }
+                        val bonesList = mutableListOf<PuppetBone>()
+                        val bonesArr = pObj.optJSONArray("bones")
+                        if (bonesArr != null) {
+                            for (bIdx in 0 until bonesArr.length()) {
+                                val bJson = bonesArr.getJSONObject(bIdx)
+                                bonesList.add(
+                                    PuppetBone(
+                                        id = bJson.optString("id", ""),
+                                        name = bJson.optString("name", "استخوان"),
+                                        parentId = if (bJson.has("parentId")) bJson.getString("parentId") else null,
+                                        startX = bJson.optDouble("sx", 0.0).toFloat(),
+                                        startY = bJson.optDouble("sy", 0.0).toFloat(),
+                                        length = bJson.optDouble("len", 80.0).toFloat(),
+                                        angle = bJson.optDouble("ang", 0.0).toFloat(),
+                                        color = bJson.optLong("col", 0xFF00E5FF),
+                                        controlShape = try {
+                                            BoneControlShape.valueOf(bJson.optString("ctrl", BoneControlShape.CIRCLE.name))
+                                        } catch (_: Exception) { BoneControlShape.CIRCLE }
+                                    )
+                                )
+                            }
+                        }
+                        val resolvedBones = PuppetWarpEngine.updateBonePositions(bonesList)
                         val generatedMesh = PuppetWarpEngine.generateMesh(360f, 360f, density)
                         puppetMod = PuppetModifier(
                             mesh = generatedMesh,
                             pins = pinsList,
+                            bones = resolvedBones,
                             physicsPreset = preset,
                             density = density,
                             showMesh = pObj.optBoolean("showMesh", true),
+                            showBones = pObj.optBoolean("showBones", true),
                             deformerType = deformer,
                             deformerRotation = pObj.optDouble("defRot", 0.0).toFloat(),
                             deformerRadius = pObj.optDouble("defRad", 150.0).toFloat()
@@ -392,8 +434,80 @@ object ProjectStorageManager {
         }
     }
 
+    fun deleteProject(context: Context, projectId: String): Boolean {
+        return try {
+            val projFile = File(context.filesDir, "project_$projectId.json")
+            if (projFile.exists()) projFile.delete()
+
+            val current = getRecentProjects(context).filter { it.id != projectId }
+            val jsonArr = JSONArray()
+            current.forEach { item ->
+                val obj = JSONObject()
+                obj.put("id", item.id)
+                obj.put("name", item.name)
+                obj.put("lastModified", item.lastModified)
+                obj.put("canvasWidth", item.canvasWidth.toDouble())
+                obj.put("canvasHeight", item.canvasHeight.toDouble())
+                obj.put("layersCount", item.layersCount)
+                obj.put("totalFrames", item.totalFrames)
+                jsonArr.put(obj)
+            }
+            File(context.filesDir, RECENT_PROJECTS_FILE).writeText(jsonArr.toString())
+            true
+        } catch (e: Exception) {
+            e.printStackTrace()
+            false
+        }
+    }
+
+    fun renameProject(context: Context, projectId: String, newName: String): Boolean {
+        return try {
+            val projFile = File(context.filesDir, "project_$projectId.json")
+            if (projFile.exists()) {
+                val p = loadProjectFromJson(projFile.readText())
+                if (p != null) {
+                    val updated = p.copy(name = newName)
+                    projFile.writeText(saveProjectToJson(updated))
+                }
+            }
+
+            val current = getRecentProjects(context).map {
+                if (it.id == projectId) it.copy(name = newName, lastModified = System.currentTimeMillis()) else it
+            }
+            val jsonArr = JSONArray()
+            current.forEach { item ->
+                val obj = JSONObject()
+                obj.put("id", item.id)
+                obj.put("name", item.name)
+                obj.put("lastModified", item.lastModified)
+                obj.put("canvasWidth", item.canvasWidth.toDouble())
+                obj.put("canvasHeight", item.canvasHeight.toDouble())
+                obj.put("layersCount", item.layersCount)
+                obj.put("totalFrames", item.totalFrames)
+                jsonArr.put(obj)
+            }
+            File(context.filesDir, RECENT_PROJECTS_FILE).writeText(jsonArr.toString())
+            true
+        } catch (e: Exception) {
+            e.printStackTrace()
+            false
+        }
+    }
+
+    fun loadProjectById(context: Context, projectId: String): Project? {
+        val projFile = File(context.filesDir, "project_$projectId.json")
+        if (projFile.exists()) {
+            val p = loadProjectFromJson(projFile.readText())
+            if (p != null) return p
+        }
+        return loadAutosavedProject(context)
+    }
+
     fun saveToRecentProjects(context: Context, project: Project) {
         try {
+            val projFile = File(context.filesDir, "project_${project.id}.json")
+            projFile.writeText(saveProjectToJson(project))
+
             val current = getRecentProjects(context).filter { it.id != project.id }.toMutableList()
             current.add(
                 0,

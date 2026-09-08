@@ -36,12 +36,18 @@ fun HomeScreen(
     recentProjects: List<ProjectMetadata>,
     onSelectPreset: (CanvasPreset) -> Unit,
     onOpenProject: (String) -> Unit,
+    onDeleteProject: (String) -> Unit,
+    onRenameProject: (String, String) -> Unit,
     onImportPuppet2d: () -> Unit,
+    onImportPhotoVideoReference: () -> Unit,
     onResumeCurrentProject: () -> Unit,
     hasActiveProject: Boolean,
     modifier: Modifier = Modifier
 ) {
     var showHelpDialog by remember { mutableStateOf(false) }
+    var projectToRename by remember { mutableStateOf<ProjectMetadata?>(null) }
+    var renameText by remember { mutableStateOf("") }
+    var projectToDelete by remember { mutableStateOf<ProjectMetadata?>(null) }
 
     Scaffold(
         topBar = {
@@ -102,15 +108,15 @@ fun HomeScreen(
                 .fillMaxSize()
                 .padding(innerPadding)
                 .padding(horizontal = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+            verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
             item {
-                Spacer(Modifier.height(4.dp))
+                Spacer(Modifier.height(2.dp))
                 // New Project Presets Section
                 Text(
                     text = stringResource(R.string.home_new_project),
                     fontWeight = FontWeight.Bold,
-                    fontSize = 16.sp,
+                    fontSize = 15.sp,
                     color = MaterialTheme.colorScheme.onSurface
                 )
                 Spacer(Modifier.height(8.dp))
@@ -129,29 +135,60 @@ fun HomeScreen(
             }
 
             item {
-                // Import file button
-                OutlinedCard(
-                    onClick = onImportPuppet2d,
+                // Import file or reference media
+                Row(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp)
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Row(
-                        modifier = Modifier.padding(14.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                    OutlinedCard(
+                        onClick = onImportPuppet2d,
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(12.dp)
                     ) {
-                        Icon(Icons.Default.FileOpen, contentDescription = null, tint = StudioAccent)
-                        Spacer(Modifier.width(12.dp))
-                        Column {
-                            Text(
-                                text = stringResource(R.string.home_open_project),
-                                fontWeight = FontWeight.SemiBold,
-                                fontSize = 13.sp
-                            )
-                            Text(
-                                text = "بارگذاری فایل فشرده انیمیشن با تمام لایه‌ها و پین‌ها",
-                                fontSize = 11.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
+                        Row(
+                            modifier = Modifier.padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(Icons.Default.FileOpen, contentDescription = null, tint = StudioAccent)
+                            Spacer(Modifier.width(8.dp))
+                            Column {
+                                Text(
+                                    text = "باز کردن پروژه",
+                                    fontWeight = FontWeight.SemiBold,
+                                    fontSize = 12.sp
+                                )
+                                Text(
+                                    text = "فایل .puppet2d",
+                                    fontSize = 10.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+
+                    OutlinedCard(
+                        onClick = onImportPhotoVideoReference,
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(Icons.Default.VideoCameraBack, contentDescription = null, tint = Color(0xFFE91E63))
+                            Spacer(Modifier.width(8.dp))
+                            Column {
+                                Text(
+                                    text = "وارد کردن ویدیو/عکس",
+                                    fontWeight = FontWeight.SemiBold,
+                                    fontSize = 12.sp
+                                )
+                                Text(
+                                    text = "مرجع روتوسکوپی",
+                                    fontSize = 10.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
                         }
                     }
                 }
@@ -167,7 +204,7 @@ fun HomeScreen(
                     Text(
                         text = stringResource(R.string.home_recent_projects),
                         fontWeight = FontWeight.Bold,
-                        fontSize = 16.sp
+                        fontSize = 15.sp
                     )
                     Badge {
                         Text("${recentProjects.size}")
@@ -203,7 +240,14 @@ fun HomeScreen(
                 items(recentProjects, key = { it.id }) { meta ->
                     RecentProjectCard(
                         metadata = meta,
-                        onClick = { onOpenProject(meta.id) }
+                        onClick = { onOpenProject(meta.id) },
+                        onRename = {
+                            projectToRename = meta
+                            renameText = meta.name
+                        },
+                        onDelete = {
+                            projectToDelete = meta
+                        }
                     )
                 }
             }
@@ -212,6 +256,63 @@ fun HomeScreen(
                 Spacer(Modifier.height(24.dp))
             }
         }
+    }
+
+    // Rename Dialog
+    if (projectToRename != null) {
+        AlertDialog(
+            onDismissRequest = { projectToRename = null },
+            title = { Text("تغییر نام پروژه", fontWeight = FontWeight.Bold, fontSize = 14.sp) },
+            text = {
+                OutlinedTextField(
+                    value = renameText,
+                    onValueChange = { renameText = it },
+                    label = { Text("نام جدید") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            },
+            confirmButton = {
+                Button(onClick = {
+                    if (renameText.isNotBlank()) {
+                        onRenameProject(projectToRename!!.id, renameText.trim())
+                    }
+                    projectToRename = null
+                }) {
+                    Text("ذخیره")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { projectToRename = null }) {
+                    Text("انصراف")
+                }
+            }
+        )
+    }
+
+    // Delete Dialog
+    if (projectToDelete != null) {
+        AlertDialog(
+            onDismissRequest = { projectToDelete = null },
+            title = { Text("حذف پروژه", fontWeight = FontWeight.Bold, fontSize = 14.sp) },
+            text = { Text("آیا از حذف پروژه «${projectToDelete!!.name}» مطمئن هستید؟ این عمل غیرقابل بازگشت است.") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        onDeleteProject(projectToDelete!!.id)
+                        projectToDelete = null
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text("حذف قطعی")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { projectToDelete = null }) {
+                    Text("انصراف")
+                }
+            }
+        )
     }
 
     if (showHelpDialog) {
@@ -226,11 +327,11 @@ fun HomeScreen(
             },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("• نقاشی ۲بعدی: قلم‌مو و پاک‌کن با نرم‌سازی خطوط، حساس به فشار قلم و بافر لایه‌ها.", fontSize = 12.sp)
-                    Text("• تغییر شکل پاپت (Puppet Warp): با افزودن پین‌ها روی لایه، شکل را به نرمی تغییر دهید.", fontSize = 12.sp)
-                    Text("• پریست‌های فیزیک زنده: اعمال خودکار جلوه‌های پارچه، فنر، آتش، آب و ژله.", fontSize = 12.sp)
-                    Text("• چرخش ۳۶۰ درجه و احجام: شبیه‌سازی کره و استوانه سه‌بعدی روی طرح‌های ۲بعدی.", fontSize = 12.sp)
-                    Text("• خروجی بدون وقفه: استخراج ویدیو MP4، تصویر متحرک GIF و فریم‌های PNG.", fontSize = 12.sp)
+                    Text("• نقاشی ۲بعدی و قلم سه‌بعدی: نرم‌سازی خطوط، حساس به فشار قلم، بافت‌ها و متریال‌های خمیری، فلزی و شیشه‌ای.", fontSize = 12.sp)
+                    Text("• تغییر شکل پاپت (Puppet Warp): پین‌گذاری برای ریگ‌بندی، چرخش ۳۶۰ درجه با جوی‌استیک حبابی متحرک.", fontSize = 12.sp)
+                    Text("• تراش حجم چندمرحله‌ای: کنترل مستقل ابعاد سر، گونه، چانه و گردن برای ساخت چهره و فیگور واقعی.", fontSize = 12.sp)
+                    Text("• تکثیر ارتش کاراکترها: کپی سریع لایه‌های پاپت به همراه تمام ریگ‌ها با یک کلیک.", fontSize = 12.sp)
+                    Text("• خروجی بدون وقفه: استخراج ویدیو با انکودر MediaCodec، تصویر متحرک GIF با LZW و سکانس فریم‌های PNG.", fontSize = 12.sp)
                 }
             },
             confirmButton = {
@@ -284,8 +385,12 @@ private fun PresetCard(
 @Composable
 private fun RecentProjectCard(
     metadata: ProjectMetadata,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    onRename: () -> Unit,
+    onDelete: () -> Unit
 ) {
+    var menuExpanded by remember { mutableStateOf(false) }
+
     Card(
         onClick = onClick,
         modifier = Modifier.fillMaxWidth(),
@@ -332,7 +437,41 @@ private fun RecentProjectCard(
                     )
                 }
             }
-            Icon(Icons.Default.ChevronLeft, contentDescription = null, tint = MaterialTheme.colorScheme.outline)
+
+            Box {
+                IconButton(onClick = { menuExpanded = true }) {
+                    Icon(Icons.Default.MoreVert, contentDescription = "عملیات پروژه", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                DropdownMenu(
+                    expanded = menuExpanded,
+                    onDismissRequest = { menuExpanded = false }
+                ) {
+                    DropdownMenuItem(
+                        text = { Text("ویرایش / باز کردن") },
+                        leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(18.dp)) },
+                        onClick = {
+                            menuExpanded = false
+                            onClick()
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("تغییر نام") },
+                        leadingIcon = { Icon(Icons.Default.DriveFileRenameOutline, contentDescription = null, modifier = Modifier.size(18.dp)) },
+                        onClick = {
+                            menuExpanded = false
+                            onRename()
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("حذف پروژه", color = MaterialTheme.colorScheme.error) },
+                        leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(18.dp)) },
+                        onClick = {
+                            menuExpanded = false
+                            onDelete()
+                        }
+                    )
+                }
+            }
         }
     }
 }

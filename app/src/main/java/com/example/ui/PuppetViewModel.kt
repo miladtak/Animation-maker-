@@ -9,6 +9,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.engine.ProjectStorageManager
 import com.example.engine.PuppetWarpEngine
 import com.example.engine.UndoRedoManager
+import com.example.engine.VideoExporter
 import com.example.model.*
 import com.example.ui.components.ExportFormat
 import com.example.ui.components.PuppetInteractionMode
@@ -35,8 +36,11 @@ class PuppetViewModel : ViewModel() {
     private val _activeTool = MutableStateFlow(ToolType.PUPPET)
     val activeTool: StateFlow<ToolType> = _activeTool.asStateFlow()
 
-    private val _puppetMode = MutableStateFlow(PuppetInteractionMode.MOVE_PIN)
+    private val _puppetMode = MutableStateFlow(PuppetInteractionMode.ROTATE_BONE)
     val puppetMode: StateFlow<PuppetInteractionMode> = _puppetMode.asStateFlow()
+
+    private val _activeBoneId = MutableStateFlow<String?>("bone_pelvis")
+    val activeBoneId: StateFlow<String?> = _activeBoneId.asStateFlow()
 
     // Brush properties
     private val _brushSize = MutableStateFlow(16f)
@@ -98,6 +102,19 @@ class PuppetViewModel : ViewModel() {
     private val _isZenMode = MutableStateFlow(false)
     val isZenMode: StateFlow<Boolean> = _isZenMode.asStateFlow()
 
+    // 3D Brush & Joystick State
+    private val _brush3dMaterial = MutableStateFlow("SOLID")
+    val brush3dMaterial: StateFlow<String> = _brush3dMaterial.asStateFlow()
+
+    private val _brush3dDepth = MutableStateFlow(12f)
+    val brush3dDepth: StateFlow<Float> = _brush3dDepth.asStateFlow()
+
+    private val _brush3dTextureUri = MutableStateFlow<String?>(null)
+    val brush3dTextureUri: StateFlow<String?> = _brush3dTextureUri.asStateFlow()
+
+    private val _isJoystickVisible = MutableStateFlow(false)
+    val isJoystickVisible: StateFlow<Boolean> = _isJoystickVisible.asStateFlow()
+
     private val _recentProjects = MutableStateFlow<List<ProjectMetadata>>(emptyList())
     val recentProjects: StateFlow<List<ProjectMetadata>> = _recentProjects.asStateFlow()
 
@@ -119,57 +136,27 @@ class PuppetViewModel : ViewModel() {
     }
 
     private fun createInitialProject(): Project {
-        val baseMesh = PuppetWarpEngine.generateMesh(360f, 360f, MeshDensity.MEDIUM)
-
-        // Initial character pins (head, chest, hands, feet)
-        val initialPins = listOf(
-            PuppetPin(id = "pin_head", x = 0f, y = -120f, originalX = 0f, originalY = -120f, pinType = PinType.STATIC),
-            PuppetPin(id = "pin_torso", x = 0f, y = 0f, originalX = 0f, originalY = 0f, pinType = PinType.STATIC),
-            PuppetPin(id = "pin_hand_l", x = -110f, y = 20f, originalX = -110f, originalY = 20f, pinType = PinType.DYNAMIC),
-            PuppetPin(id = "pin_hand_r", x = 110f, y = 20f, originalX = 110f, originalY = 20f, pinType = PinType.DYNAMIC),
-            PuppetPin(id = "pin_leg_l", x = -60f, y = 140f, originalX = -60f, originalY = 140f, pinType = PinType.STATIC),
-            PuppetPin(id = "pin_leg_r", x = 60f, y = 140f, originalX = 60f, originalY = 140f, pinType = PinType.STATIC)
-        )
-
-        val puppetModifier = PuppetModifier(
-            mesh = baseMesh,
-            pins = initialPins,
-            showMesh = true,
-            density = MeshDensity.MEDIUM
-        )
-
-        val characterLayer = Layer(
-            id = "layer_character",
-            name = "کاراکتر پاپت اصلی",
-            type = LayerType.SHAPE,
-            shapeData = ShapeData(
-                shapeType = ShapeType.STAR,
-                radius = 120f,
-                fillColor = 0xFF3898EC,
-                strokeColor = 0xFFFFFFFF,
-                strokeWidth = 4f
-            ),
-            puppetModifier = puppetModifier
-        )
-
-        val bgLayer = Layer(
-            id = "layer_bg",
-            name = "پس‌زمینه بوم",
-            type = LayerType.SHAPE,
-            shapeData = ShapeData(
-                shapeType = ShapeType.RECT,
-                width = 800f,
-                height = 800f,
-                fillColor = 0xFF1B1B22,
-                strokeColor = 0xFF2B2B36,
-                strokeWidth = 2f
-            )
+        val initialLayer = Layer(
+            id = "layer_drawing_1",
+            name = "لایه طراحی ۱",
+            type = LayerType.RASTER,
+            rasterStrokes = emptyList(),
+            shapeData = null,
+            textData = null,
+            puppetModifier = PuppetModifier()
         )
 
         return Project(
-            name = "استودیو پاپت ۱",
-            layers = listOf(bgLayer, characterLayer),
-            activeLayerId = characterLayer.id
+            name = "استودیو پویانمایی ۱",
+            canvasWidth = 1080f,
+            canvasHeight = 1080f,
+            layers = listOf(initialLayer),
+            activeLayerId = initialLayer.id,
+            settings = ProjectSettings(
+                backgroundMode = CanvasBackgroundMode.DARK,
+                showGrid = true,
+                gridSpacing = 40f
+            )
         )
     }
 
@@ -275,16 +262,152 @@ class PuppetViewModel : ViewModel() {
         _showLayersPanel.update { !it }
     }
 
+    // --- 3D Brush, Joystick & Deformation Controls ---
+    fun setBrush3dMaterial(mat: String) { _brush3dMaterial.value = mat }
+    fun setBrush3dDepth(depth: Float) { _brush3dDepth.value = depth }
+    fun setBrush3dTextureUri(uri: String?) { _brush3dTextureUri.value = uri }
+
+    fun toggleJoystick(show: Boolean? = null) {
+        _isJoystickVisible.value = show ?: !_isJoystickVisible.value
+    }
+
+    fun setDeformerRotation(angle: Float) {
+        val activeId = _project.value.activeLayerId
+        _project.update { p ->
+            p.copy(
+                layers = p.layers.map { l ->
+                    if (l.id == activeId) {
+                        l.copy(puppetModifier = l.puppetModifier.copy(deformerRotation = angle))
+                    } else l
+                }
+            )
+        }
+    }
+
+    fun setDeformer3D(rotation: Float, pitch: Float, yaw: Float) {
+        val activeId = _project.value.activeLayerId
+        _project.update { p ->
+            p.copy(
+                layers = p.layers.map { l ->
+                    if (l.id == activeId) {
+                        l.copy(puppetModifier = l.puppetModifier.copy(
+                            deformerRotation = rotation,
+                            deformerPitch = pitch,
+                            deformerYaw = yaw
+                        ))
+                    } else l
+                }
+            )
+        }
+    }
+
+    fun setCanvasBackgroundMode(mode: CanvasBackgroundMode) {
+        _project.update { p ->
+            p.copy(settings = p.settings.copy(backgroundMode = mode))
+        }
+        undoRedoManager.recordState(_project.value)
+    }
+
+    fun commitTextToCanvas() {
+        val activeId = _project.value.activeLayerId
+        val activeLayer = _project.value.layers.find { it.id == activeId }
+        val textValue = _currentText.value.ifBlank { "متن انیمیشن" }
+        val a = (_brushColor.value.alpha * 255).toInt().coerceIn(0, 255)
+        val r = (_brushColor.value.red * 255).toInt().coerceIn(0, 255)
+        val g = (_brushColor.value.green * 255).toInt().coerceIn(0, 255)
+        val b = (_brushColor.value.blue * 255).toInt().coerceIn(0, 255)
+        val colorLong = ((a.toLong() and 0xFF) shl 24) or
+                        ((r.toLong() and 0xFF) shl 16) or
+                        ((g.toLong() and 0xFF) shl 8) or
+                        (b.toLong() and 0xFF)
+
+        if (activeLayer?.type == LayerType.TEXT) {
+            _project.update { p ->
+                p.copy(
+                    layers = p.layers.map { l ->
+                        if (l.id == activeId) {
+                            l.copy(
+                                name = textValue.take(12),
+                                textData = (l.textData ?: TextData()).copy(
+                                    text = textValue,
+                                    mode = _textMode.value,
+                                    textColor = colorLong
+                                )
+                            )
+                        } else l
+                    }
+                )
+            }
+        } else {
+            val newTextLayerId = UUID.randomUUID().toString()
+            val textLayer = Layer(
+                id = newTextLayerId,
+                name = textValue.take(12),
+                type = LayerType.TEXT,
+                textData = TextData(
+                    text = textValue,
+                    mode = _textMode.value,
+                    textColor = colorLong
+                )
+            )
+            _project.update { p ->
+                p.copy(
+                    layers = p.layers + textLayer,
+                    activeLayerId = newTextLayerId
+                )
+            }
+        }
+        undoRedoManager.recordState(_project.value)
+    }
+
+    fun clonePuppetArmy() {
+        val activeId = _project.value.activeLayerId
+        val activeLayer = _project.value.layers.find { it.id == activeId } ?: return
+        val cloneId = UUID.randomUUID().toString()
+        val clonedLayer = activeLayer.copy(
+            id = cloneId,
+            name = "${activeLayer.name} (کپی)",
+            transform = activeLayer.transform.copy(
+                translationX = activeLayer.transform.translationX + 50f,
+                translationY = activeLayer.transform.translationY + 50f
+            ),
+            puppetModifier = activeLayer.puppetModifier.copy(
+                pins = activeLayer.puppetModifier.pins.map { it.copy(id = UUID.randomUUID().toString()) }
+            )
+        )
+        _project.update { p ->
+            p.copy(
+                layers = p.layers + clonedLayer,
+                activeLayerId = cloneId
+            )
+        }
+        undoRedoManager.recordState(_project.value)
+    }
+
     // --- Drawing on Raster Layer ---
     fun addStrokePoint(point: PointData, isEraser: Boolean) {
         currentStrokePoints.add(point)
         val activeId = _project.value.activeLayerId
-        val colorLong = _brushColor.value.value.toLong()
+
+        val a = (_brushColor.value.alpha * 255).toInt().coerceIn(0, 255)
+        val r = (_brushColor.value.red * 255).toInt().coerceIn(0, 255)
+        val g = (_brushColor.value.green * 255).toInt().coerceIn(0, 255)
+        val b = (_brushColor.value.blue * 255).toInt().coerceIn(0, 255)
+        val colorLong = ((a.toLong() and 0xFF) shl 24) or
+                        ((r.toLong() and 0xFF) shl 16) or
+                        ((g.toLong() and 0xFF) shl 8) or
+                        (b.toLong() and 0xFF)
+
+        val is3D = _activeTool.value == ToolType.BRUSH_3D
         val stroke = DrawingStroke(
             color = colorLong,
-            strokeWidth = _brushSize.value,
+            strokeWidth = if (is3D) _brush3dDepth.value.coerceAtLeast(8f) else _brushSize.value,
             points = currentStrokePoints.toList(),
-            isEraser = isEraser
+            isEraser = isEraser,
+            is3D = is3D,
+            depthAngle = _project.value.layers.find { it.id == activeId }?.puppetModifier?.deformerRotation ?: 0f,
+            materialPreset = _brush3dMaterial.value,
+            textureUri = _brush3dTextureUri.value
         )
 
         _project.update { p ->
@@ -399,11 +522,17 @@ class PuppetViewModel : ViewModel() {
             p.copy(
                 layers = p.layers.map { l ->
                     if (l.id == layerId) {
+                        val resetBones = l.puppetModifier.bones.map { it.copy(angle = 0f) }
+                        val updatedBones = PuppetWarpEngine.updateBonePositions(resetBones)
                         l.copy(
                             puppetModifier = l.puppetModifier.copy(
                                 pins = l.puppetModifier.pins.map { pin ->
                                     pin.copy(x = pin.originalX, y = pin.originalY, velocityX = 0f, velocityY = 0f)
-                                }
+                                },
+                                bones = updatedBones,
+                                deformerRotation = 0f,
+                                deformerPitch = 0f,
+                                deformerYaw = 0f
                             )
                         )
                     } else l
@@ -412,6 +541,184 @@ class PuppetViewModel : ViewModel() {
         }
         undoRedoManager.recordState(_project.value)
     }
+
+    // --- SKELETAL RIGGING & FORWARD KINEMATICS (FK) ---
+    fun selectBone(boneId: String?) {
+        _activeBoneId.value = boneId
+    }
+
+    fun setupDefaultSkeleton(layerId: String) {
+        val defaultBones = PuppetWarpEngine.createDefaultCharacterSkeleton(0f, 0f)
+        val targetLayer = _project.value.layers.find { it.id == layerId }
+        val meshVerts = targetLayer?.puppetModifier?.mesh?.originalVertices ?: emptyList()
+        val weights = PuppetWarpEngine.calculateAutoBoneWeights(meshVerts, defaultBones)
+
+        _project.update { p ->
+            p.copy(
+                layers = p.layers.map { l ->
+                    if (l.id == layerId) {
+                        l.copy(
+                            puppetModifier = l.puppetModifier.copy(
+                                bones = defaultBones,
+                                boneWeights = weights,
+                                showBones = true
+                            )
+                        )
+                    } else l
+                }
+            )
+        }
+        _activeBoneId.value = "bone_chest"
+        undoRedoManager.recordState(_project.value)
+    }
+
+    fun addBone(layerId: String, clickX: Float, clickY: Float, parentId: String? = _activeBoneId.value) {
+        val targetLayer = _project.value.layers.find { it.id == layerId } ?: return
+        val currentBones = targetLayer.puppetModifier.bones
+        val parent = parentId?.let { pid -> currentBones.find { it.id == pid } }
+
+        val newBoneId = "bone_${System.currentTimeMillis() % 10000}"
+        val (startX, startY, length, angle) = if (parent != null) {
+            val sx = parent.globalEndX
+            val sy = parent.globalEndY
+            val dx = clickX - sx
+            val dy = clickY - sy
+            val dist = kotlin.math.hypot(dx, dy).coerceAtLeast(30f)
+            val globalTouchAngle = Math.toDegrees(kotlin.math.atan2(dy.toDouble(), dx.toDouble())).toFloat()
+            val localAngle = globalTouchAngle - parent.globalAngle
+            Tuple4(sx, sy, dist, localAngle)
+        } else {
+            Tuple4(clickX, clickY, 80f, 0f)
+        }
+
+        val newBone = PuppetBone(
+            id = newBoneId,
+            name = "استخوان ${currentBones.size + 1}",
+            parentId = parent?.id,
+            startX = startX,
+            startY = startY,
+            length = length,
+            angle = angle,
+            color = if (parent == null) 0xFF00E5FF else 0xFF00E676,
+            controlShape = if (parent == null) BoneControlShape.SQUARE else BoneControlShape.CIRCLE
+        )
+
+        val updatedBones = PuppetWarpEngine.updateBonePositions(currentBones + newBone)
+        val meshVerts = targetLayer.puppetModifier.mesh.originalVertices
+        val newWeights = PuppetWarpEngine.calculateAutoBoneWeights(meshVerts, updatedBones)
+
+        _project.update { p ->
+            p.copy(
+                layers = p.layers.map { l ->
+                    if (l.id == layerId) {
+                        l.copy(
+                            puppetModifier = l.puppetModifier.copy(
+                                bones = updatedBones,
+                                boneWeights = newWeights,
+                                showBones = true
+                            )
+                        )
+                    } else l
+                }
+            )
+        }
+        _activeBoneId.value = newBoneId
+        undoRedoManager.recordState(_project.value)
+    }
+
+    fun rotateBone(layerId: String, boneId: String, deltaAngle: Float, commitToHistory: Boolean) {
+        _project.update { p ->
+            p.copy(
+                layers = p.layers.map { l ->
+                    if (l.id == layerId) {
+                        val updated = l.puppetModifier.bones.map { b ->
+                            if (b.id == boneId) b.copy(angle = b.angle + deltaAngle) else b
+                        }
+                        val resolved = PuppetWarpEngine.updateBonePositions(updated)
+                        l.copy(puppetModifier = l.puppetModifier.copy(bones = resolved))
+                    } else l
+                }
+            )
+        }
+        if (commitToHistory) {
+            undoRedoManager.recordState(_project.value)
+        }
+    }
+
+    fun setBoneAngle(layerId: String, boneId: String, absoluteAngle: Float, commitToHistory: Boolean) {
+        _project.update { p ->
+            p.copy(
+                layers = p.layers.map { l ->
+                    if (l.id == layerId) {
+                        val updated = l.puppetModifier.bones.map { b ->
+                            if (b.id == boneId) b.copy(angle = absoluteAngle) else b
+                        }
+                        val resolved = PuppetWarpEngine.updateBonePositions(updated)
+                        l.copy(puppetModifier = l.puppetModifier.copy(bones = resolved))
+                    } else l
+                }
+            )
+        }
+        if (commitToHistory) {
+            undoRedoManager.recordState(_project.value)
+        }
+    }
+
+    fun deleteBone(layerId: String, boneId: String) {
+        _project.update { p ->
+            p.copy(
+                layers = p.layers.map { l ->
+                    if (l.id == layerId) {
+                        val remaining = l.puppetModifier.bones
+                            .filter { it.id != boneId }
+                            .map { if (it.parentId == boneId) it.copy(parentId = null) else it }
+                        val resolved = PuppetWarpEngine.updateBonePositions(remaining)
+                        val weights = PuppetWarpEngine.calculateAutoBoneWeights(
+                            l.puppetModifier.mesh.originalVertices,
+                            resolved
+                        )
+                        l.copy(puppetModifier = l.puppetModifier.copy(bones = resolved, boneWeights = weights))
+                    } else l
+                }
+            )
+        }
+        if (_activeBoneId.value == boneId) _activeBoneId.value = null
+        undoRedoManager.recordState(_project.value)
+    }
+
+    fun autoSkinning(layerId: String) {
+        val targetLayer = _project.value.layers.find { it.id == layerId } ?: return
+        val bones = targetLayer.puppetModifier.bones
+        if (bones.isEmpty()) return
+        val meshVerts = targetLayer.puppetModifier.mesh.originalVertices
+        val weights = PuppetWarpEngine.calculateAutoBoneWeights(meshVerts, bones)
+
+        _project.update { p ->
+            p.copy(
+                layers = p.layers.map { l ->
+                    if (l.id == layerId) {
+                        l.copy(puppetModifier = l.puppetModifier.copy(boneWeights = weights))
+                    } else l
+                }
+            )
+        }
+        undoRedoManager.recordState(_project.value)
+    }
+
+    fun toggleShowBones(layerId: String) {
+        _project.update { p ->
+            p.copy(
+                layers = p.layers.map { l ->
+                    if (l.id == layerId) {
+                        val cur = l.puppetModifier.showBones
+                        l.copy(puppetModifier = l.puppetModifier.copy(showBones = !cur))
+                    } else l
+                }
+            )
+        }
+    }
+
+    private data class Tuple4<A, B, C, D>(val a: A, val b: B, val c: C, val d: D)
 
     fun updatePuppetModifier(layerId: String, modifier: PuppetModifier) {
         // Regenerate mesh if density changed
@@ -752,31 +1059,11 @@ class PuppetViewModel : ViewModel() {
 
         viewModelScope.launch {
             try {
-                // Simulate frame extraction & encoding progress smoothly
-                for (step in 1..20) {
-                    delay(80)
-                    _exportProgress.value = step / 20f
+                val exportedFile = VideoExporter.exportAnimation(context, _project.value, format) { progress ->
+                    _exportProgress.value = progress
                 }
-
-                // Render current canvas to a PNG file in cache
-                val exportFile = File(context.cacheDir, "puppet_export_${System.currentTimeMillis()}.png")
-                val bitmap = Bitmap.createBitmap(720, 720, Bitmap.Config.ARGB_8888)
-                val canvas = android.graphics.Canvas(bitmap)
-                canvas.drawColor(0xFF18181C.toInt())
-                val paint = android.graphics.Paint().apply {
-                    color = 0xFF3898EC.toInt()
-                    textSize = 32f
-                    isAntiAlias = true
-                    textAlign = android.graphics.Paint.Align.CENTER
-                }
-                canvas.drawText("Puppet Studio 2D Animation Output", 360f, 360f, paint)
-
-                FileOutputStream(exportFile).use { out ->
-                    bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
-                }
-
                 _isExporting.value = false
-                _exportCompleted.value = true
+                _exportCompleted.value = (exportedFile != null && exportedFile.exists())
             } catch (e: Exception) {
                 e.printStackTrace()
                 _isExporting.value = false
@@ -791,6 +1078,29 @@ class PuppetViewModel : ViewModel() {
 
     fun refreshRecentProjects(context: Context) {
         _recentProjects.value = ProjectStorageManager.getRecentProjects(context)
+    }
+
+    fun deleteProject(context: Context, projectId: String) {
+        ProjectStorageManager.deleteProject(context, projectId)
+        refreshRecentProjects(context)
+    }
+
+    fun renameProject(context: Context, projectId: String, newName: String) {
+        ProjectStorageManager.renameProject(context, projectId, newName)
+        if (_project.value.id == projectId) {
+            _project.update { it.copy(name = newName) }
+        }
+        refreshRecentProjects(context)
+    }
+
+    fun loadProjectById(context: Context, projectId: String) {
+        val p = ProjectStorageManager.loadProjectById(context, projectId)
+        if (p != null) {
+            _project.value = p
+            undoRedoManager.clear()
+            undoRedoManager.recordState(p)
+            _isHomeScreenVisible.value = false
+        }
     }
 
     fun newProjectFromPreset(preset: CanvasPreset, context: Context) {

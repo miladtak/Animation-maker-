@@ -1,5 +1,8 @@
 package com.example.ui.components
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -46,6 +49,8 @@ fun TimelineBar(
     onAddAudioTrack: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    var isDrawerOpen by remember { mutableStateOf(false) }
+
     Surface(
         modifier = modifier
             .fillMaxWidth()
@@ -55,16 +60,73 @@ fun TimelineBar(
         border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.5f))
     ) {
         Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 4.dp, horizontal = 8.dp)
+            modifier = Modifier.fillMaxWidth()
         ) {
-            // Upper control row: Play/Pause, Stop, Loop, Onion skin, FPS, New Timeline, Audio
+            // Blender-style Drawer Pull Header (همیشه قابل لمس برای باز/بستن کشو و دارای دکمه پخش فوری)
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { isDrawerOpen = !isDrawerOpen }
+                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.85f))
+                    .padding(horizontal = 12.dp, vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        if (isDrawerOpen) Icons.Default.KeyboardArrowDown else Icons.Default.KeyboardArrowUp,
+                        contentDescription = if (isDrawerOpen) "بستن کشوی تایم‌لاین" else "باز کردن کشوی تایم‌لاین",
+                        tint = StudioAccent,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        text = "کشوی تایم‌لاین (فریم ${timeline.currentFrame + 1} از ${timeline.totalFrames} - ${timeline.fps} FPS)",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    // دکمه پخش و مکث سریع در سربرگ کشو
+                    IconButton(
+                        onClick = onPlayPauseToggle,
+                        modifier = Modifier.size(28.dp)
+                    ) {
+                        Icon(
+                            if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                            contentDescription = "پخش/مکث",
+                            tint = if (isPlaying) StudioAccent else MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                    Spacer(Modifier.width(4.dp))
+                    Text(
+                        text = if (isDrawerOpen) "بستن کشو ▼" else "باز کردن تایم‌لاین ▲",
+                        fontSize = 10.sp,
+                        color = StudioAccent,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+            }
+
+            AnimatedVisibility(
+                visible = isDrawerOpen,
+                enter = expandVertically(),
+                exit = shrinkVertically()
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 4.dp, horizontal = 8.dp)
+                ) {
+                    // Upper control row: Play/Pause, Stop, Loop, Onion skin, FPS, New Timeline, Audio
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
                 // Playback Buttons
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     IconButton(
@@ -260,6 +322,8 @@ fun TimelineBar(
             }
         }
     }
+}
+}
 }
 
 @Composable

@@ -31,6 +31,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.R
 import com.example.model.PuppetModifier
+import com.example.model.ToolType
 import com.example.ui.components.*
 import java.io.File
 import java.io.FileOutputStream
@@ -66,6 +67,11 @@ fun PuppetStudioScreen(
     val isZenMode by viewModel.isZenMode.collectAsStateWithLifecycle()
     val recentProjects by viewModel.recentProjects.collectAsStateWithLifecycle()
 
+    val brush3dMaterial by viewModel.brush3dMaterial.collectAsStateWithLifecycle()
+    val brush3dDepth by viewModel.brush3dDepth.collectAsStateWithLifecycle()
+    val isJoystickVisible by viewModel.isJoystickVisible.collectAsStateWithLifecycle()
+    val activeBoneId by viewModel.activeBoneId.collectAsStateWithLifecycle()
+
     val snackbarHostState = remember { SnackbarHostState() }
 
     val activeLayer = project.layers.find { it.id == project.activeLayerId }
@@ -76,7 +82,18 @@ fun PuppetStudioScreen(
         viewModel.refreshRecentProjects(context)
     }
 
-    // Import file picker launcher for .puppet2d and images
+    // Media reference picker (video/photo)
+    val mediaReferenceLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            viewModel.addVideoReferenceLayer(uri.toString(), "مرجع تصویری")
+            viewModel.hideHomeScreen()
+            Toast.makeText(context, "مرجع تصویری به لایه‌ها اضافه شد.", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    // Import file picker launcher for .puppet2d
     val fileImportLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
@@ -107,8 +124,11 @@ fun PuppetStudioScreen(
             HomeScreen(
                 recentProjects = recentProjects,
                 onSelectPreset = { preset -> viewModel.newProjectFromPreset(preset, context) },
-                onOpenProject = { id -> viewModel.openProjectById(id, context) },
+                onOpenProject = { id -> viewModel.loadProjectById(context, id) },
+                onDeleteProject = { id -> viewModel.deleteProject(context, id) },
+                onRenameProject = { id, name -> viewModel.renameProject(context, id, name) },
                 onImportPuppet2d = { fileImportLauncher.launch("*/*") },
+                onImportPhotoVideoReference = { mediaReferenceLauncher.launch("*/*") },
                 onResumeCurrentProject = { viewModel.hideHomeScreen() },
                 hasActiveProject = project.layers.isNotEmpty()
             )
@@ -189,6 +209,11 @@ fun PuppetStudioScreen(
                             onAddPuppetPin = { lId, x, y -> viewModel.addPuppetPin(lId, x, y) },
                             onMovePuppetPin = { lId, pId, x, y, commit -> viewModel.movePuppetPin(lId, pId, x, y, commit) },
                             onDeletePuppetPin = { lId, pId -> viewModel.deletePuppetPin(lId, pId) },
+                            selectedBoneId = activeBoneId,
+                            onSelectBone = { viewModel.selectBone(it) },
+                            onRotateBone = { lId, bId, deltaAngle, commit -> viewModel.rotateBone(lId, bId, deltaAngle, commit) },
+                            onAddBone = { lId, x, y -> viewModel.addBone(lId, x, y) },
+                            onBackgroundModeChange = { viewModel.setCanvasBackgroundMode(it) },
                             modifier = Modifier.fillMaxSize()
                         )
                     }
@@ -213,24 +238,95 @@ fun PuppetStudioScreen(
                             onTextChange = { viewModel.setCurrentText(it) },
                             textMode = textMode,
                             onTextModeChange = { viewModel.setTextMode(it) },
+                            onCommitTextToCanvas = { viewModel.commitTextToCanvas() },
                             onResetTransform = { activeLayer?.let { viewModel.resetTransform(it.id) } },
                             onResetPuppetPose = { activeLayer?.let { viewModel.resetPuppetPose(it.id) } },
                             isZenMode = isZenMode,
                             onToggleZenMode = { viewModel.toggleZenMode() },
+                            isJoystickVisible = isJoystickVisible,
+                            onToggleJoystick = { viewModel.toggleJoystick() },
+                            onClonePuppetArmy = { viewModel.clonePuppetArmy() },
+                            brush3dMaterial = brush3dMaterial,
+                            onBrush3dMaterialChange = { viewModel.setBrush3dMaterial(it) },
+                            brush3dDepth = brush3dDepth,
+                            onBrush3dDepthChange = { viewModel.setBrush3dDepth(it) },
+                            onPick3dTextureImage = { mediaReferenceLauncher.launch("image/*") },
+                            selectedBoneId = activeBoneId,
+                            onSelectBone = { viewModel.selectBone(it) },
+                            onSetupDefaultSkeleton = { activeLayer?.let { viewModel.setupDefaultSkeleton(it.id) } },
+                            onAutoSkinning = { activeLayer?.let { viewModel.autoSkinning(it.id) } },
+                            onDeleteSelectedBone = {
+                                activeLayer?.let { l ->
+                                    activeBoneId?.let { bId -> viewModel.deleteBone(l.id, bId) }
+                                }
+                            },
+                            onBoneAngleChange = { angle ->
+                                activeLayer?.let { l ->
+                                    activeBoneId?.let { bId -> viewModel.setBoneAngle(l.id, bId, angle, true) }
+                                }
+                            },
                             modifier = Modifier
                                 .align(Alignment.TopCenter)
                                 .padding(top = 8.dp)
                         )
                     }
 
-                    // Vertical Tool Bar on Side edge (Visible when not in Zen Mode)
+                    // FlipaClip-like Draggable, Auto-Hiding Studio ToolBar
                     if (!isZenMode) {
                         StudioToolBar(
                             activeTool = activeTool,
-                            onSelectTool = { viewModel.selectTool(it) },
-                            modifier = Modifier
-                                .align(Alignment.CenterStart)
-                                .padding(start = 8.dp)
+                            onSelectTool = { viewModel.selectTool(it) }
+                        )
+                    }
+
+                    // Floating 360° Rotation & 3D Globe Trackball Widget (گوی کره زمین)
+                    if (isJoystickVisible && !isZenMode) {
+                        val activeBone = activePuppetModifier.bones.find { it.id == activeBoneId }
+                        val currentAngle = when {
+                            activeBone != null -> activeBone.angle
+                            activeTool == ToolType.SELECT_MOVE && activeLayer != null -> activeLayer.transform.rotation
+                            else -> activePuppetModifier.deformerRotation
+                        }
+                        val title = when {
+                            activeBone != null -> "استخوان: ${activeBone.name}"
+                            activeTool == ToolType.SELECT_MOVE && activeLayer != null -> "چرخش: ${activeLayer.name}"
+                            else -> "گوی سه‌بعدی پاپت (کره زمین)"
+                        }
+
+                        FloatingJoystickWidget(
+                            currentAngle = currentAngle,
+                            currentPitch = activePuppetModifier.deformerPitch,
+                            currentYaw = activePuppetModifier.deformerYaw,
+                            title = title,
+                            onAngleChange = { newAngle ->
+                                if (activeBone != null && activeLayer != null) {
+                                    val delta = newAngle - activeBone.angle
+                                    viewModel.rotateBone(activeLayer.id, activeBone.id, delta, false)
+                                } else if (activeTool == ToolType.SELECT_MOVE && activeLayer != null) {
+                                    viewModel.updateLayerTransform(
+                                        activeLayer.id,
+                                        activeLayer.transform.copy(rotation = newAngle),
+                                        false
+                                    )
+                                } else {
+                                    viewModel.setDeformerRotation(newAngle)
+                                }
+                            },
+                            on3DChange = { rot, pitch, yaw ->
+                                if (activeBone != null && activeLayer != null) {
+                                    val delta = rot - activeBone.angle
+                                    viewModel.rotateBone(activeLayer.id, activeBone.id, delta, false)
+                                } else if (activeTool == ToolType.SELECT_MOVE && activeLayer != null) {
+                                    viewModel.updateLayerTransform(
+                                        activeLayer.id,
+                                        activeLayer.transform.copy(rotation = rot),
+                                        false
+                                    )
+                                } else {
+                                    viewModel.setDeformer3D(rot, pitch, yaw)
+                                }
+                            },
+                            onClose = { viewModel.toggleJoystick(false) }
                         )
                     }
 
@@ -305,8 +401,8 @@ fun PuppetStudioScreen(
                             onCancel = { viewModel.toggleExportDialog(false) },
                             onShare = {
                                 val shareIntent = Intent(Intent.ACTION_SEND).apply {
-                                    type = "image/png"
-                                    putExtra(Intent.EXTRA_TEXT, "خروجی انیمیشن ساخته شده با Puppet Studio 2D")
+                                    type = "video/mp4"
+                                    putExtra(Intent.EXTRA_TEXT, "خروجی انیمیشن ساخته شده با استودیو پاپت 2D")
                                 }
                                 context.startActivity(Intent.createChooser(shareIntent, "اشتراک‌گذاری انیمیشن"))
                             },

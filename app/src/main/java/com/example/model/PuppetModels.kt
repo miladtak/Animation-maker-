@@ -4,11 +4,12 @@ import java.util.UUID
 
 enum class ToolType {
     SELECT_MOVE,
+    PUPPET,
     BRUSH,
+    BRUSH_3D,
     ERASER,
     SHAPES,
     TEXT,
-    PUPPET,
     COLOR_PICKER,
     HAND,
     ZOOM
@@ -69,6 +70,41 @@ enum class PinType {
     CONTROLLER
 }
 
+enum class BoneControlShape {
+    CIRCLE,   // حلقه و مفصل دایره‌ای (مانند زانوها و دست‌ها در عکس)
+    SQUARE,   // دستگیره کنترلی مربعی (مانند سینه، گردن و لگن در عکس)
+    DIAMOND   // لوزی کنترلی
+}
+
+data class PuppetBone(
+    val id: String = UUID.randomUUID().toString(),
+    val name: String = "استخوان",
+    val parentId: String? = null, // کلید اتصال سلسله‌مراتبی مفاصل
+    val startX: Float = 0f,
+    val startY: Float = 0f,
+    val length: Float = 80f,
+    val angle: Float = 0f, // زاویه محلی نسبت به والد (درجه)
+    val globalStartX: Float = 0f, // محاسبه شده توسط موتور FK
+    val globalStartY: Float = 0f,
+    val globalEndX: Float = 0f,
+    val globalEndY: Float = 0f,
+    val globalAngle: Float = 0f,
+    val color: Long = 0xFF00E5FF, // فیروزه‌ای مطابق عکس کاربر
+    val controlShape: BoneControlShape = BoneControlShape.CIRCLE
+)
+
+data class BoneWeight(
+    val boneId: String,
+    val weight: Float // وزن بین 0.0 تا 1.0 (مجموع وزن‌های هر نقطه = 1.0)
+)
+
+data class WeightedVertex(
+    val id: String = UUID.randomUUID().toString(),
+    val originalX: Float,
+    val originalY: Float,
+    val weights: List<BoneWeight> = emptyList()
+)
+
 enum class PhysicsPreset {
     NONE,
     CLOTH,
@@ -97,8 +133,19 @@ enum class InvisibleDeformerType {
     SPHERE,
     CYLINDER,
     CAPSULE,
-    BALLOON
+    BALLOON,
+    HEAD_NECK,
+    BODY_TORSO,
+    FREE_CONTOUR
 }
+
+data class VolumeContour(
+    val topScale: Float = 1.0f,
+    val upperMidScale: Float = 1.0f,
+    val lowerMidScale: Float = 1.0f,
+    val bottomScale: Float = 1.0f,
+    val verticalCurve: Float = 0f
+)
 
 enum class RulerUnit(val factorFromPx: Float, val label: String) {
     PIXELS(1.0f, "px"),
@@ -166,12 +213,20 @@ data class PuppetPin(
 data class PuppetModifier(
     val mesh: PuppetMesh = PuppetMesh(),
     val pins: List<PuppetPin> = emptyList(),
+    val bones: List<PuppetBone> = emptyList(),
+    val boneWeights: Map<Int, List<BoneWeight>> = emptyMap(),
+    val strokeBoneWeights: Map<Int, List<BoneWeight>> = emptyMap(), // vertex index in strokes to bone weights
     val physicsPreset: PhysicsPreset = PhysicsPreset.NONE,
     val density: MeshDensity = MeshDensity.MEDIUM,
     val showMesh: Boolean = true,
+    val showBones: Boolean = true,
+    val selectedBoneId: String? = null,
     val deformerType: InvisibleDeformerType = InvisibleDeformerType.NONE,
     val deformerRotation: Float = 0f,
+    val deformerPitch: Float = 0f,
+    val deformerYaw: Float = 0f,
     val deformerRadius: Float = 150f,
+    val volumeContour: VolumeContour = VolumeContour(),
     val physicsParams: PhysicsParams = PhysicsParams()
 )
 
@@ -179,7 +234,11 @@ data class DrawingStroke(
     val color: Long = 0xFFFFFFFF,
     val strokeWidth: Float = 12f,
     val points: List<PointData> = emptyList(),
-    val isEraser: Boolean = false
+    val isEraser: Boolean = false,
+    val is3D: Boolean = false,
+    val depthAngle: Float = 0f,
+    val materialPreset: String = "SOLID",
+    val textureUri: String? = null
 )
 
 data class ShapeData(
@@ -233,6 +292,8 @@ data class Layer(
     val textData: TextData? = null,
     val imageUri: String? = null,
     val videoRefData: VideoRefData? = null,
+    val chromaKeyEnabled: Boolean = false,
+    val chromaKeyThreshold: Float = 0.35f,
     val puppetModifier: PuppetModifier = PuppetModifier()
 )
 
@@ -240,6 +301,7 @@ data class Frame(
     val index: Int = 0,
     val layerOverrides: Map<String, LayerTransform> = emptyMap(),
     val pinOverrides: Map<String, List<PuppetPin>> = emptyMap(),
+    val boneOverrides: Map<String, List<PuppetBone>> = emptyMap(),
     val strokesPerLayer: Map<String, List<DrawingStroke>> = emptyMap()
 )
 
@@ -263,12 +325,21 @@ data class Timeline(
     val audioTrack: AudioTrack? = null
 )
 
+enum class CanvasBackgroundMode(val label: String, val colorLong: Long) {
+    DARK("مشکی استودیویی", 0xFF1E1E24),
+    WHITE("سفید", 0xFFFFFFFF),
+    GRAY("خاکستری", 0xFF808080),
+    TRANSPARENT("شطرنجی (شفاف)", 0x00000000),
+    GREEN_SCREEN("پرده سبز (کروماکی)", 0xFF00FF00)
+}
+
 data class ProjectSettings(
     val unit: RulerUnit = RulerUnit.PIXELS,
     val showGrid: Boolean = true,
     val showRulers: Boolean = true,
     val snapToGrid: Boolean = true,
-    val gridSpacing: Float = 40f
+    val gridSpacing: Float = 40f,
+    val backgroundMode: CanvasBackgroundMode = CanvasBackgroundMode.DARK
 )
 
 data class Scene(

@@ -29,7 +29,13 @@
     <string name="tool_hand">دست / جابه‌جایی بوم</string>
     <string name="tool_zoom">بزرگ‌نمایی</string>
 
-    <!-- Puppet Warp / Deform -->
+    <!-- Puppet Warp / Skeletal Rigging -->
+    <string name="puppet_mode_rotate_bone">چرخش مفصل و استخوان (FK)</string>
+    <string name="puppet_mode_add_bone">افزودن استخوان به زنجیره</string>
+    <string name="puppet_bone_auto_skin">پیوند خودکار پوست (Auto Skinning)</string>
+    <string name="puppet_bone_default_skeleton">اسکلت کامل کاراکتر</string>
+    <string name="puppet_bone_delete">حذف استخوان</string>
+    <string name="puppet_show_bones">نمایش استخوان‌ها</string>
     <string name="puppet_add_pin">افزودن پین</string>
     <string name="puppet_move_pin">جابه‌جایی پین</string>
     <string name="puppet_rotate_pin">چرخش پین</string>
